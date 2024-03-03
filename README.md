@@ -6,7 +6,7 @@
 <!-- badges: start -->
 <!-- badges: end -->
 
-The goal of vabl is to …
+This is the repo for the package. We can put a vignette here.
 
 ## Installation
 
