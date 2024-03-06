@@ -1,3 +1,6 @@
+#' @export
+#'
+
 vabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
                            b_init = TRUE, check_every = 10, store_every = check_every){
 
