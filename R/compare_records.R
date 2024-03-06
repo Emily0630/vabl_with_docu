@@ -75,7 +75,7 @@ compare_records <- function(df1, df2, fields,
       distance <- abs(df1[ids_1, fields_1[f]] - df2[ids_2, fields_2[f]])
       comp <- cut(distance,
                   breaks = breaklist[[f]]) %>%
-        as.integer( )%>%
+        as.integer( ) %>%
         factor(., seq_len(length(breaklist[[f]]) - 1))
       comparisons[[f]] <- comp
     }

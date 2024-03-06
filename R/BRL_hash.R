@@ -31,7 +31,7 @@ BRL_hash <- function(hash, m_prior = 1, u_prior = 1,
 
   candidates_P <- 0:P
   Z_samps <- matrix(NA, nrow = n2, ncol = S)
-  m_usamps <- matrix(NA, nrow = length(field_marker), ncol = S)
+  m_samps <- matrix(NA, nrow = length(field_marker), ncol = S)
   u_samps <- matrix(NA, nrow = length(field_marker), ncol = S)
   L_samps <- vector(length = S)
 
