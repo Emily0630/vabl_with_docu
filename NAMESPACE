@@ -2,6 +2,7 @@
 
 export(BRL_hash)
 export(combine_hash)
+export(compare_records)
 export(estimate_links)
 export(evaluate_links)
 export(fabl)

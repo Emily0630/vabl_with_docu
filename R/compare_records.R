@@ -1,3 +1,5 @@
+#' @export
+#'
 compare_records <- function(df_1, df_2, fields,
                                fields_1 = fields, fields_2 = fields,
                                types = rep("bi", length(fields)),
