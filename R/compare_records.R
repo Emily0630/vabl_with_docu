@@ -43,8 +43,8 @@ compare_records <- function(df_1, df_2, fields,
   ids <- expand.grid(1:n1, 1:n2)
   ids_1 <- ids[, 1]
   ids_2 <- ids[, 2]
-  comparisons <- vector(mode = "list", length = F)
-  ohe <- vector(mode = "list", length = F)
+  comparisons <- vector(mode = "list", length = FF)
+  ohe <- vector(mode = "list", length = FF)
 
   # FS agreement levels
   for(f in 1:FF){
