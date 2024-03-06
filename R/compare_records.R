@@ -1,20 +1,19 @@
 #' @export
 #'
-compare_records <- function(df_1, df_2, fields,
+compare_records <- function(df1, df2, fields,
                                fields_1 = fields, fields_2 = fields,
                                types = rep("bi", length(fields)),
                                breaks = rep(list(NA), length(types)),
                                distance_metric = "Levenshtein"){
 
-  n1 <- nrow(df_1)
-  n2 <- nrow(df_2)
+  n1 <- nrow(df1)
+  n2 <- nrow(df2)
   FF <- length(fields)
 
   if(typeof(breaks) == "double"){
-    breaklist <- rep(list(-Inf, breaks, Inf), length(types))
-  }
+    breaklist <- rep(list(c(-Inf, breaks, Inf)), length(types))
 
-  if(typeof(breaks) == "list"){
+  } else if (typeof(breaks) == "list"){
     breaklist <- rep(list(NA), length(types))
 
     for(f in 1:F){
@@ -30,9 +29,7 @@ compare_records <- function(df_1, df_2, fields,
       if(types[f] == "nu"){
         breaklist[[f]] <- c(-Inf, breaks[[f]], Inf)
       }
-
     }
-
   }
 
 
@@ -49,37 +46,37 @@ compare_records <- function(df_1, df_2, fields,
   # FS agreement levels
   for(f in 1:FF){
     if(types[f] == "bi"){
-      comp <- df_1[ids_1, fields_1[f]] == df_2[ids_2, fields_2[f]]
+      comp <- df1[ids_1, fields_1[f]] == df2[ids_2, fields_2[f]]
       comp <- (!comp) + 1
       comparisons[[f]] <- factor(comp)
     }
     if(types[f] == "lv"){
       if(distance_metric == "Levenshtein"){
-        distance <- RecordLinkage::levenshteinDist(as.character(df_1[ids_1, fields_1[f]]),
-                                       as.character(df_2[ids_2, fields_2[f]]))
+        distance <- RecordLinkage::levenshteinDist(as.character(df1[ids_1, fields_1[f]]),
+                                       as.character(df2[ids_2, fields_2[f]]))
       }
       if(distance_metric == "Damerau-Levenshtein"){
       # Damerau-Levenshtein distance, so transpositions count as 1.
       # In contrast, BRL uses standard Levenshtein, so transpositions count as 2
-      distance <- 1 - levitate::lev_ratio(as.character(df_1[ids_1, fields_1[f]]),
-                                          as.character(df_2[ids_2, fields_2[f]]),
+      distance <- 1 - levitate::lev_ratio(as.character(df1[ids_1, fields_1[f]]),
+                                          as.character(df2[ids_2, fields_2[f]]),
                                           useNames = F)
       }
 
       comp <- cut(distance,
                   breaks = breaklist[[f]]) %>%
         as.integer() %>%
-        factor()
+        factor(., seq_len(length(breaklist[[f]]) - 1))
       comparisons[[f]] <- comp
 
     }
 
     if(types[f] == "nu"){
-      distance <- abs(df_1[ids_1, fields_1[f]] - df_2[ids_2, fields_2[f]])
+      distance <- abs(df1[ids_1, fields_1[f]] - df2[ids_2, fields_2[f]])
       comp <- cut(distance,
-                  breaks = breaklist[[f]],
-                  include.lowest = T) %>%
-        as.integer()
+                  breaks = breaklist[[f]]) %>%
+        as.integer( )%>%
+        factor(., seq_len(length(breaklist[[f]]) - 1))
       comparisons[[f]] <- comp
     }
   }
@@ -111,16 +108,3 @@ compare_records <- function(df_1, df_2, fields,
               n_levels = n_levels)
 
 }
-
-# ohe <- comparisons %>%
-#   lapply(. , function(x){
-#     if(any(is.na(x)) == T){
-#       scorecard::one_hot(data.frame(x), nacol_rm = T) %>%
-#         as.matrix()
-#     } else {
-#       scorecard::one_hot(data.frame(x)) %>%
-#         as.matrix()
-#     }
-#   }) %>%
-#   do.call(data.frame, .)
-

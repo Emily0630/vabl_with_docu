@@ -1,0 +1,37 @@
+---
+title: "Troubleshoot"
+output: html_document
+date: "2024-03-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+getwd()
+
+# dfA <- read.csv("../../bk_vabl/data/febrl_4_A")
+# dfB <- read.csv("../../bk_vabl/data/febrl_4_B")
+
+df1 <- read.csv("../../bk_vabl/data/febrl_4_A.csv") %>%
+  arrange(rec_id) %>%
+  mutate(rec_id = row_number())
+df2 <- read.csv("../../bk_vabl/data/febrl_4_B.csv") %>%
+  arrange(rec_id) %>%
+  mutate(rec_id = row_number())
+
+n1 <- nrow(df1)
+n2 <- nrow(df2)
+
+Z_true <- seq(1:5000)
+fields <- c(2, 3, 8, 10, 11)
+types <- c("lv", "lv","bi", "bi", "bi")
+breaks = c(0, .15)
+
+start <- tic()
+cd <- compare_records(df1, df2, fields = fields, types = types,
+                      breaks = breaks)
+compare_time <- unname(toc(quiet = T)$toc - start)
+```
+
