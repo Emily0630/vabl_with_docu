@@ -6,7 +6,7 @@
 
 svabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
                           b_init = TRUE, B = min(1000, hash$n2),
-                          k = 1, tau = 1, seed = 0, fixed_u = F,
+                          k = 1, tau = 1, seed = 0,
                           check_every = 10, store_every = check_every){
 
   set.seed(seed)
@@ -30,7 +30,7 @@ svabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
   if(b_init == T){
     b <- hash$ohe %>%
       sweep(., 1, hash$total_counts, "*") %>%
-      colSums()
+      colSums() + Beta
   } else {
     b = rep(1, length(field_marker))
   }

@@ -37,6 +37,7 @@ cd <- compare_records(df1, df2, fields = fields, types = types,
 hash <- hash_comparisons(cd, all_patterns = F)
 out <- vabl(hash)
 
+out <- svabl(hash)
 results <- estimate_links(out, hash)
 results$Z_hat
 evaluate_links(results$Z_hat, Z_true, n1)
