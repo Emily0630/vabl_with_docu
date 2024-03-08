@@ -22,6 +22,11 @@ df2 <- read.csv("../../bk_vabl/data/febrl_4_B.csv") %>%
   arrange(rec_id) %>%
   mutate(rec_id = row_number())
 
+df1 <- df1[1:100, ]
+df2 <- df2[1:100, ]
+
+
+
 n1 <- nrow(df1)
 n2 <- nrow(df2)
 
@@ -30,6 +35,11 @@ fields <- c(2, 3, 8, 10, 11)
 types <- c("lv", "lv","bi", "bi", "bi")
 breaks = c(0, .15)
 
+cd <-  BRL::compareRecords(df1, df2, flds = fields, types = types,
+                      breaks = breaks)
+
+chain <- BRL::bipartiteGibbs(cd)
+class(cd$comparisons)
 cd <- compare_records(df1, df2, fields = fields, types = types,
                       breaks = breaks)
 

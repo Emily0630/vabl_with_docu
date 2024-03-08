@@ -95,8 +95,7 @@ compare_records <- function(df1, df2, fields,
 
 
 
-  gamma <- do.call(cbind, ohe) %>%
-    data.frame()
+  gamma <- do.call(cbind, ohe)
 
   # Might be useful for compatibility with other packages
   # gamma_fs <- do.call(cbind, comparisons) %>%
