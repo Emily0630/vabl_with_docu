@@ -33,6 +33,10 @@ breaks = c(0, .15)
 cd <- compare_records(df1, df2, fields = fields, types = types,
                       breaks = breaks)
 
+chain <- fabl(hash, S = 100)
+results <- estimate_links(out, hash)
+evaluate_links(results$Z_hat, Z_true, n1)
+
 
 hash <- hash_comparisons(cd, all_patterns = F)
 out <- vabl(hash)

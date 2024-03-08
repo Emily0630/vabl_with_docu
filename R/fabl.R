@@ -116,10 +116,10 @@ fabl <- function(hash, m_prior = 1, u_prior = 1, alpha = 1, beta = 1,
 
   Z_samps[Z_samps == 0] <- n1 + 1
 
-  list(Z = Z_samps,
-       m = m_samps,
-       u = u_samps,
-       overlap = L_samps,
-       pi = pi_samps)
+  list(Z = Z_samps[, -(1:burn)],
+       m = m_samps[, -(1:burn)],
+       u = u_samps[, -(1:burn)],
+       overlap = L_samps[-(1:burn)],
+       pi = pi_samps[-(1:burn)])
 
 }

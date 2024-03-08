@@ -105,6 +105,6 @@ compare_records <- function(df1, df2, fields,
   out <- list(comparisons = gamma,
               n1 = n1,
               n2 = n2,
-              n_levels = n_levels)
+              nDisagLevs = n_levels)
 
 }
