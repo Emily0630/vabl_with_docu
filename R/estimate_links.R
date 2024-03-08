@@ -254,11 +254,6 @@ estimate_links<- function(out, hash, l_FNM=1, l_FM1=1, l_FM2=2, l_R=Inf,
 #
 # }
 
-thing <- sapply(possible_records, function(x){
-  is.na(x) %>%
-    sum()
+
 })
 
-look_at <- which(thing > 0)
-
-possible_records[[look_at[3]]]
