@@ -255,5 +255,3 @@ estimate_links<- function(out, hash, l_FNM=1, l_FM1=1, l_FM2=2, l_R=Inf,
 # }
 
 
-})
-
