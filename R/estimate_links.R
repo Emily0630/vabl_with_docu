@@ -57,9 +57,12 @@ estimate_links<- function(out, hash, l_FNM=1, l_FM1=1, l_FM2=2, l_R=Inf,
     possible_records <- lapply(1:n2, function(j){
       record <- c(hash$flags[[j]]$eligible_records, 0)
       prob <- c(pattern_probs[[j]][hash$flags[[j]]$eligible_patterns],
-                exp(digamma(out$b_pi)) / out$C[j])
+                exp(digamma(out$b_pi)) / out$C[j]) %>%
+        unname()
 
       data.frame(record, prob)
+
+      #record
     })
 
     max_prob <- lapply(possible_records, function(x){
@@ -250,3 +253,12 @@ estimate_links<- function(out, hash, l_FNM=1, l_FM1=1, l_FM2=2, l_R=Inf,
 #
 #
 # }
+
+thing <- sapply(possible_records, function(x){
+  is.na(x) %>%
+    sum()
+})
+
+look_at <- which(thing > 0)
+
+possible_records[[look_at[3]]]
