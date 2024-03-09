@@ -60,7 +60,7 @@ compare_records <- function(df1, df2, fields,
     }
     if(types[f] == "lv"){
       if(distance_metric == "Levenshtein"){
-        distance <- RecordLinkage::levenshteinDist(as.character(df1[ids_1, fields_1[f]]),
+        distance <- 1 - RecordLinkage::levenshteinSim(as.character(df1[ids_1, fields_1[f]]),
                                        as.character(df2[ids_2, fields_2[f]]))
       }
       if(distance_metric == "Damerau-Levenshtein"){
