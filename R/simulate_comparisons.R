@@ -37,7 +37,7 @@ simulate_comparisons <- function(m, u, levels, n1, n2, overlap,
   indicators[match_index,] <- gamma_match
   indicators[-match_index,] <- gamma_nonmatch
   }
-  Sadinle_indicators <- purrr::map2(data.frame(indicators), levels, ~fs_to_sadinle_2(.x, .y)) %>%
+  Sadinle_indicators <- purrr::map2(data.frame(indicators), levels, ~fs_to_ohe(.x, .y)) %>%
     do.call(cbind, .)
 
   list(comparisons = Sadinle_indicators,
