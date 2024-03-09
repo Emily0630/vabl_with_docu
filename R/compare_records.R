@@ -3,7 +3,8 @@
 compare_records <- function(df1, df2, fields,
                                fields_1 = fields, fields_2 = fields,
                                types = rep("bi", length(fields)),
-                               breaks = rep(list(NA), length(types)),
+                               #breaks = rep(list(NA), length(types)),
+                            breaks = c(0, .25, .5),
                                distance_metric = "Levenshtein"){
 
   n1 <- nrow(df1)
@@ -13,24 +14,31 @@ compare_records <- function(df1, df2, fields,
   if(typeof(breaks) == "double"){
     breaklist <- rep(list(c(-Inf, breaks, Inf)), length(types))
 
-  } else if (typeof(breaks) == "list"){
+  }
+  if(typeof(breaks) == "list"){
     breaklist <- rep(list(NA), length(types))
-
-    for(f in 1:F){
-      if(types[f] == "lv" & is.na(breaks[[f]])){
-        breaklist[[f]] <- c(0, .25, .5)
-      }
-      if(types[f] == "lv"){
-        breaklist[[f]] <- c(-Inf, breaks[[f]], Inf)
-      }
-      if(types[f] == "nu" & is.na(breaks[[f]])){
-        breaklist[[f]] <- c(0, 1)
-      }
-      if(types[f] == "nu"){
-        breaklist[[f]] <- c(-Inf, breaks[[f]], Inf)
-      }
+    for(f in 1:FF){
+      breaklist[[f]] <- unique(c(-Inf, breaks[[f]], Inf))
     }
   }
+  # else if (typeof(breaks) == "list"){
+  #   breaklist <- rep(list(NA), length(types))
+  #
+  #   for(f in 1:FF){
+  #     if(types[f] == "lv" & is.na(breaks[[f]])){
+  #       breaklist[[f]] <- c(0, .25, .5)
+  #     }
+  #     if(types[f] == "lv"){
+  #       breaklist[[f]] <- c(-Inf, breaks[[f]], Inf)
+  #     }
+  #     if(types[f] == "nu" & is.na(breaks[[f]])){
+  #       breaklist[[f]] <- c(0, 1)
+  #     }
+  #     if(types[f] == "nu"){
+  #       breaklist[[f]] <- c(-Inf, breaks[[f]], Inf)
+  #     }
+  #   }
+  # }
 
 
 
