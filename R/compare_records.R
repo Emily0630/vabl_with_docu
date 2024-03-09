@@ -17,13 +17,13 @@ compare_records <- function(df1, df2, fields,
     breaklist <- rep(list(NA), length(types))
 
     for(f in 1:F){
-      if(types[f] == "lv" & breaks[[f]] == NA){
+      if(types[f] == "lv" & is.na(breaks[[f]])){
         breaklist[[f]] <- c(0, .25, .5)
       }
       if(types[f] == "lv"){
         breaklist[[f]] <- c(-Inf, breaks[[f]], Inf)
       }
-      if(types[f] == "nu" & breaks[[f]] == NA){
+      if(types[f] == "nu" & is.na(breaks[[f]])){
         breaklist[[f]] <- c(0, 1)
       }
       if(types[f] == "nu"){

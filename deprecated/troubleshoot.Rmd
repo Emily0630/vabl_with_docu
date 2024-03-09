@@ -30,7 +30,7 @@ df2 <- df2[1:100, ]
 n1 <- nrow(df1)
 n2 <- nrow(df2)
 
-Z_true <- seq(1:5000)
+Z_true <- seq(1:100)
 fields <- c(2, 3, 8, 10, 11)
 types <- c("lv", "lv","bi", "bi", "bi")
 breaks = c(0, .15)
@@ -39,12 +39,12 @@ cd <-  BRL::compareRecords(df1, df2, flds = fields, types = types,
                       breaks = breaks)
 
 chain <- BRL::bipartiteGibbs(cd)
-class(cd$comparisons)
+
 cd <- compare_records(df1, df2, fields = fields, types = types,
                       breaks = breaks)
 
 chain <- fabl(hash, S = 100)
-results <- estimate_links(out, hash)
+results <- estimate_links(chain, hash)
 evaluate_links(results$Z_hat, Z_true, n1)
 
 
