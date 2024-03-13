@@ -15,7 +15,9 @@ Depends:
 Imports: 
     MCMCpack,
     purrr,
-    stringr
+    stringr, 
+    levitate,
+    RecordLinkage
 Suggests: 
     knitr,
     rmarkdown

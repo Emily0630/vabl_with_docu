@@ -14,7 +14,6 @@ svabl(
   k = 1,
   tau = 1,
   seed = 0,
-  fixed_u = F,
   check_every = 10,
   store_every = check_every
 )
