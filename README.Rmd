@@ -20,23 +20,6 @@ knitr::opts_chunk$set(
 
 This repo implements the record linkage techniques proposed in Variational Beta Linkage (citation TBD). 
 
-## Installation
-
-You can install the development version of vabl like so:
-
-```{r}
-devtools::install_github("briankundinger/vabl")
-```
-
-## Example
-
-Add vignette?
-
-```{r example}
-library(vabl)
-
-```
-
 
 
  <!-- devtools::build_readme() -->

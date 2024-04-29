@@ -4,6 +4,8 @@ estimate_links<- function(out, hash, l_FNM=1, l_FM1=1, l_FM2=2, l_R=Inf,
                           nonmatch_label = "zero", resolve = T){
   # "out" can be the output from either fabl or vabl.
 
+  n1 <- hash$n1
+  n2 <- hash$n2
 
   if(names(out)[1] == "Z"){
     Z_samps <- out$Z
@@ -18,6 +20,9 @@ estimate_links<- function(out, hash, l_FNM=1, l_FM1=1, l_FM2=2, l_R=Inf,
     prob_no_link <- sapply(probs, function(x){
       1 - sum(x[names(x) != n1 + 1])
     })
+    # prob_no_link <- sapply(probs, function(x){
+    #   1 - sum(x[names(x) != 0])
+    # })
     Z_hat <- rep(0, n2)
     best_match <- sapply(probs, function(x){
       names(which.max(x))
