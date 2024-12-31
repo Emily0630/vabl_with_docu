@@ -1,125 +1,184 @@
-#' @export
+#' Fast Bipartite Record Linkage (FABL)
 #'
+#' Implements bipartite record linkage with a BK sampling mechanism.
+#' This function uses a Gibbs sampler to sample M/U parameters and
+#' link states (Z) for records in the second data frame.
+#'
+#' @param hash A list containing:
+#'   \describe{
+#'     \item{\code{ohe}}{A \code{P x L} matrix of unique patterns.}
+#'     \item{\code{total_counts}}{A numeric vector of length \code{P},
+#'       indicating how many times each pattern occurs in total.}
+#'     \item{\code{hash_count_list}}{A list of length \code{n2}, where each entry
+#'       is a numeric vector of length \code{P}.}
+#'     \item{\code{hash_to_file_1}}{A list used for sampling which \code{df1} record
+#'       belongs to each pattern for each record in \code{df2}.}
+#'     \item{\code{field_marker}}{An integer vector indicating which field each
+#'       column belongs to.}
+#'     \item{\code{n1}}{Number of records in the first data frame.}
+#'     \item{\code{n2}}{Number of records in the second data frame.}
+#'   }
+#' @param m_prior, u_prior Numeric prior distribution parameters for M and U (Dirichlet).
+#' @param alpha, beta Numeric shape parameters for the Beta prior on the linkage probability \code{\pi}.
+#' @param S Integer number of Gibbs iterations.
+#' @param burn Integer number of iterations to discard as burn-in (defaults to 10\% of \code{S}).
+#' @param show_progress Logical; if \code{TRUE}, prints progress at intervals.
+#'
+#' @return A list with:
+#'   \describe{
+#'     \item{\code{Z}}{An \code{n2 x (S - burn)} matrix of sampled link states
+#'       (record IDs in \code{df1}), with \code{n1+1} representing "no link".}
+#'     \item{\code{m}}{A \code{length(field_marker) x (S - burn)} matrix of sampled M parameters.}
+#'     \item{\code{u}}{A \code{length(field_marker) x (S - burn)} matrix of sampled U parameters.}
+#'     \item{\code{overlap}}{A numeric vector of length \code{S - burn} giving
+#'       the number of linked pairs after each iteration.}
+#'     \item{\code{pi}}{A numeric vector of length \code{S - burn} giving the
+#'       sampled linkage probability \code{\pi}.}
+#'   }
+#'
+#' @examples
+#' \dontrun{
+#' # Suppose 'hash_data' is the output from compare_records() + hashing
+#' # fabl_out <- fabl(hash_data, m_prior=1, u_prior=1, alpha=1, beta=1, S=1000)
+#' }
+#'
+#' @export
+fabl <- function(
+    hash,
+    m_prior    = 1,
+    u_prior    = 1,
+    alpha      = 1,
+    beta       = 1,
+    S          = 1000,
+    burn       = round(S * 0.1),
+    show_progress = TRUE
+) {
+  #------------------------------------------------------------------
+  # 1) Extract data from 'hash'
+  #------------------------------------------------------------------
+  num_records_df1  <- hash$n1
+  num_records_df2  <- hash$n2
+  field_marker_vec <- hash$field_marker
 
-fabl <- function(hash, m_prior = 1, u_prior = 1, alpha = 1, beta = 1,
-                 S = 1000, burn = round(S * .1),
-                 show_progress = T){
-  # Implements bipartite record linkage with BK Sampling Mechanism
-  #
-  # Arguments
-  # comparisons = list calculated from from BRL::compareRecords
-  # m.prior = prior distribution for m parameters
-  # u.prior= prior distribution for u parameters
-  # alpha = first parameter of prior for linkage probability
-  # beta = second parameter of prior for linkage probability
-  # S = number of Gibbs iterations
-  # burn = number of iterations to be discarded as burn-in
-  # show_progress = set to false to show simulation progress
+  unique_patterns  <- hash$ohe           # (P x L)
+  pattern_counts   <- hash$total_counts  # length P
+  hash_count_list  <- hash$hash_count_list
+  hash_to_file_1   <- hash$hash_to_file_1
 
-  n1 <- hash$n1
-  n2 <- hash$n2
-  field_marker <- hash$field_marker
+  P <- nrow(unique_patterns)  # number of patterns
+  L <- length(field_marker_vec)  # number of columns/features
 
-  unique_patterns <- hash$ohe
-  pattern_counts <- hash$total_counts
-  P <- nrow(unique_patterns)
-  hash_count_list <- hash$hash_count_list
-  hash_to_file_1 <-hash$hash_to_file_1
+  #------------------------------------------------------------------
+  # 2) Allocate storage for MCMC output
+  #------------------------------------------------------------------
+  Z_samps <- matrix(0, nrow = num_records_df2, ncol = S)
+  m_samps <- matrix(NA, nrow = L, ncol = S)
+  u_samps <- matrix(NA, nrow = L, ncol = S)
+  L_samps <- numeric(S)
+  pi_samps <- numeric(S)
 
-  candidates_P <- 0:P
-  Z_samps <- matrix(0, nrow = n2, ncol = S)
-  m_samps <- matrix(NA, nrow = length(field_marker), ncol = S)
-  u_samps <- matrix(NA, nrow = length(field_marker), ncol = S)
-  L_samps <- vector(length = S)
-  pi_samps <- vector(length = S)
+  #------------------------------------------------------------------
+  # 3) Initialize
+  #------------------------------------------------------------------
+  # Z: pattern index (0..P) for each record in df2
+  Z <- rep(0, num_records_df2)
+  # Overlap = # matched pairs
+  L_val <- 0
+  # matches_vec: how many times each pattern (1..P) is chosen
+  matches_vec <- rep(0, P)
 
-  # Initialize
-  Z <- rep(0, n2)
-  L <- 0
-  m <- u <- rep(0, length(field_marker))
-  matches <- rep(0,P)
+  #------------------------------------------------------------------
+  # 4) Gibbs Sampler
+  #------------------------------------------------------------------
+  for (s in seq_len(S)) {
 
-  # Gibbs
-  for(s in 1:S){
-
-    # Update m and u
-    AZ <- sweep(unique_patterns, MARGIN = 1, STAT = matches, FUN = "*") %>%
+    # (a) Matched & nonmatched counts => A, B
+    AZ <- sweep(unique_patterns, 1, matches_vec, `*`) %>%
       colSums() %>%
       unname()
-    nonmatches <- pattern_counts - matches
-
-    BZ <- sweep(unique_patterns, MARGIN = 1, STAT = nonmatches, FUN = "*") %>%
+    nonmatches_vec <- pattern_counts - matches_vec
+    BZ <- sweep(unique_patterns, 1, nonmatches_vec, `*`) %>%
       colSums() %>%
       unname()
 
-    m_post <- m_prior + AZ
-    u_post <- u_prior + BZ
+    # (b) Update m & u using Dirichlet draws
+    temp_mu <- fabl_compute_m_u(AZ, BZ, m_prior, u_prior, field_marker_vec)
+    m_vec   <- temp_mu$m_vec
+    u_vec   <- temp_mu$u_vec
 
-    m_post <- split(m_post, field_marker)
-    m <- as.vector(unlist(sapply(m_post, function(x){
-      prob <- MCMCpack::rdirichlet(1, x)
-      prob/sum(prob)
-    })))
+    # (c) Compute pattern weights
+    ratio <- (log(m_vec) - log(u_vec))
+    ratio_mat <- matrix(rep(ratio, P), nrow = P, byrow = TRUE)
+    unique_weights <- exp(rowSums(ratio_mat * unique_patterns, na.rm = TRUE))
 
-    u_post <- split(u_post, field_marker)
-    u <- as.vector(unlist(sapply(u_post, function(x){
-      prob <- MCMCpack::rdirichlet(1, x)
-      prob/sum(prob)
-    })))
+    # (d) Build hash_weights = list of length n2 => each is hash_count_list[[j]] * unique_weights
+    hash_weights <- lapply(hash_count_list, function(x) x * unique_weights)
 
+    # (e) Sample pi from Beta(L_val+alpha, n2 - L_val + beta)
+    pi_val <- rbeta(1, L_val + alpha, (num_records_df2 - L_val) + beta)
 
-    # Calculate weights
-    ratio <- (log(m) - log(u)) %>%
-      rep(., P) %>%
-      matrix(., nrow = P, byrow = TRUE)
+    # (f) Use the helper function fabl_sample_Z() to re-sample each record j
+    samp_out <- fabl_sample_Z(
+      Z         = Z,
+      L_val     = L_val,
+      n1        = num_records_df1,
+      n2        = num_records_df2,
+      P         = P,
+      hash_weights = hash_weights,
+      pi_val       = pi_val,
+      hash_to_file_1 = hash_to_file_1
+    )
 
-    unique_weights <- exp(rowSums(ratio * unique_patterns, na.rm = TRUE))
+    # Extract updated Z, L_val, and real_ids
+    Z     <- samp_out$Z
+    L_val <- samp_out$L_val
+    real_ids <- samp_out$real_ids  # length n2
 
-    hash_weights <- lapply(hash_count_list, function(x){
-      x * unique_weights
-    })
+    # Store real_ids in Z_samps (the "df1" ID or n1+1 for no link)
+    Z_samps[, s] <- real_ids
 
-    pi <- rbeta(1, L + alpha, n2 - L + beta)
+    # (g) Count how many times each pattern is chosen => matches_vec
+    #     (Z is 0..P, but 0 means "no link")
+    Z_factor <- factor(Z, levels = 0:P)
+    df_Z <- data.frame(Z_factor)
+    matches_tab <- df_Z %>%
+      dplyr::group_by(Z_factor, .drop = FALSE) %>%
+      dplyr::count() %>%
+      dplyr::filter(Z_factor != 0) %>%
+      dplyr::pull(n)
+    matches_vec <- matches_tab
 
-    for(j in 1:n2){
-      if(Z[j] > 0){
-        L <- L - 1
-      }
-      Z[j] <- sample(candidates_P, 1,
-                     prob = c(1 - pi, hash_weights[[j]] * pi / n1))
-      if(Z[j] > 0){
-        index <- ceiling(runif(1) * length(hash_to_file_1[[j]][[Z[j]]]))
-        Z_samps[j, s] <- hash_to_file_1[[j]][[Z[j]]][index]
-        L <- L + 1
-      }
+    # (h) Store iteration results
+    m_samps[, s] <- m_vec
+    u_samps[, s] <- u_vec
+    L_samps[s]   <- L_val
+    pi_samps[s]  <- pi_val
+
+    # (i) Optional progress
+    if (show_progress && (s %% max(1, (S / 100)) == 0)) {
+      flush.console()
+      cat("\r", paste("Simulation:", s / (S / 100), "% complete"))
     }
-    hash_matches <- factor(Z, levels = 0:P)
-    df <- data.frame(hash_matches)
-    matches <- df %>%
-      group_by(hash_matches, .drop = F) %>%
-      count() %>%
-      filter(hash_matches != 0) %>%
-      pull()
+  } # end for(s in seq_len(S))
 
-    m_samps[,s] <- m
-    u_samps[,s] <- u
-    L_samps[s] <- L
-    pi_samps[s] <- pi
+  #------------------------------------------------------------------
+  # 5) Post-processing: burn-in removal
+  #------------------------------------------------------------------
+  keep_iters <- seq.int(burn + 1, S)
+  Z_final <- Z_samps[, keep_iters, drop = FALSE]
+  m_final <- m_samps[, keep_iters, drop = FALSE]
+  u_final <- u_samps[, keep_iters, drop = FALSE]
+  L_final <- L_samps[keep_iters]
+  pi_final <- pi_samps[keep_iters]
 
-    if(show_progress){
-      if (s %% (S / 100) == 0) {
-        flush.console()
-        cat("\r", paste("Simulation", ": ", s / (S / 100), "% complete", sep = ""))
-      }
-    }
-  }
-
-  Z_samps[Z_samps == 0] <- n1 + 1
-
-  list(Z = Z_samps[, -(1:burn)],
-       m = m_samps[, -(1:burn)],
-       u = u_samps[, -(1:burn)],
-       overlap = L_samps[-(1:burn)],
-       pi = pi_samps[-(1:burn)])
-
+  #------------------------------------------------------------------
+  # 6) Return final results
+  #------------------------------------------------------------------
+  list(
+    Z       = Z_final,
+    m       = m_final,
+    u       = u_final,
+    overlap = L_final,
+    pi      = pi_final
+  )
 }

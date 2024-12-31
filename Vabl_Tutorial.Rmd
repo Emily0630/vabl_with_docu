@@ -1,0 +1,442 @@
+---
+title: "Variation Beta Linkage (vabl) Tutorial"
+date: 
+output: 
+  pdf_document:
+    citation_package: biblatex
+bibliography: reference.bib
+---
+
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+This tutorial demonstrates how to use the `R` package 
+`vabl` for bipartite record linkage. The tutorial
+will be broken into four tasks: data processing, creating comparison vectors, hashing, and running `vabl`. We use the `RL10000` dataset as an example dataset throughout.
+  
+
+
+## Installation
+
+We will now install the `vabl` package, which contains the functions used to implement the proposed method. To install the `vabl` package, run the following command in the console:
+
+```{r}
+# install.packages("vabl.tar.gz", repos = NULL, type = "source")
+```
+
+We may need to install additional packages for the scripts, which done by entering the following into the console. 
+```{r}
+# install.packages("BRL")
+# install.packages("RecordLinkage")
+# install.packages("dplyr")
+# install.packages("glue")
+# install.packages("tictoc")
+```
+
+We then load the packages. 
+```{r}
+library(RecordLinkage)
+library(dplyr)
+library(tictoc)
+library(vabl)
+library(ggplot2)
+```
+
+## The Example Dataset
+
+We demonstrate how to perform `vabl` using the `RLdata10000` dataset included in the package `RecordLinkage`. The `RLdata10000` dataset contains 10000 synthetic personal records, 1000 of which are duplicates with randomly-generated errors. For each record, it has seven attributes: 
+- **fname_c1**: The first component of the individual's first name.
+- **fname_c2**: The second component of the individual's first name, if applicable. In this dataset, it is mostly `NA`, indicating no second part to the first name.
+- **lname_c1**: The first component of the individual's last name.
+- **lname_c2**: The second component of the individual's last name, if applicable. This is also mostly `NA` in the dataset.
+- **by**: The birth year of the individual.
+- **bm**: The birth month, ranging from 1 to 12.
+- **bd**: The birth day, representing the day of birth.
+
+We now load the data set to give an overview.
+
+```{r, eval=TRUE, message=FALSE, warning=FALSE}
+head(RLdata10000)
+```
+# Data Processing
+
+After loading the dataset, we split the duplicated records into two balanced data frames, `df1` and `df2`. This is achieved by identifying the `unique_id`s of records included in the dataset. Note that the `unique_id`s are only used for data processing and results evaluation and are not part of the algorithm since unique identifiers are often absent in entity resolution tasks. The code identifies records with duplicated `unique_id`s, extracts those records, and splits them into two groups: even-numbered and odd-numbered rows. Similarly, non-duplicated records are extracted and divided into two groups. The even-numbered duplicated and non-duplicated records are combined to form `df1`, while the odd-numbered duplicated and non-duplicated records are combined to form `df2`. Finally, the number of rows in each data frame is counted and stored in `n1` and `n2`.In summary:
+
+- `data`: The original `RL10000` dataset with an additional `unique_id` column for each record.
+- `duplicates`: The number of duplicates in the dataset, calculated as 10% of the total records.
+- `duplicated_ids`: A list of `unique_id`s that are duplicated in the dataset.
+- `duplicated_records`: The data frame containing the records corresponding to the duplicated `unique_id`s.
+- `duplicated_1`: The data frame containing the even-numbered duplicated records.
+- `duplicated_2`: The data frame containing the odd-numbered duplicated records.
+- `non_duplicated_records`: The data frame containing the records with non-duplicated `unique_id`s.
+- `non_duplicated_1`: The data frame containing the even-numbered non-duplicated records.
+- `non_duplicated_2`: The data frame containing the odd-numbered non-duplicated records.
+- `df1`: The data frame containing even-numbered duplicated and non-duplicated records.
+- `df2`: The data frame containing odd-numbered duplicated and non-duplicated records.
+- `n1`: The number of rows in `df1`.
+- `n2`: The number of rows in `df2`.
+
+```{r}
+# Load the dataset and add a unique ID
+data <- RecordLinkage::RLdata10000 %>%
+  mutate(unique_id = RecordLinkage::identity.RLdata10000)
+
+# Calculate 10% duplicates
+duplicates <- nrow(data) * .1
+
+# Identify duplicated records by unique_id
+duplicated_ids <- data %>%
+  filter(duplicated(unique_id)) %>%
+  select(unique_id) %>%
+  pull()
+
+# Extract duplicated records and assign row numbers
+duplicated_records <- data %>%
+  filter(unique_id %in% duplicated_ids) %>%
+  arrange(unique_id) %>%
+  mutate(rn = row_number())
+
+# Split duplicated records into two sets
+duplicated_1 <- duplicated_records %>%
+  filter(rn %% 2 == 0)
+
+duplicated_2 <- duplicated_records %>%
+  filter(rn %% 2 == 1)
+
+# Extract non-duplicated records and assign row numbers
+non_duplicated_records <- data %>%
+  filter(!(unique_id %in% duplicated_ids)) %>%
+  mutate(rn = row_number())
+
+# Split non-duplicated records into two sets
+`non_duplicated_1` <- non_duplicated_records %>%
+  filter(rn %% 2 == 0)
+
+non_duplicated_2 <- non_duplicated_records %>%
+  filter(rn %% 2 == 1)
+
+# Combine both sets into two separate dataframes
+df1 <- rbind(duplicated_1, non_duplicated_1)
+df2 <- rbind(duplicated_2, non_duplicated_2)
+
+# Count number of rows in df1 and df2
+n1 <- nrow(df1)
+n2 <- nrow(df2)
+```
+
+
+# Creatibg Comparison Vectors
+
+The `vabl` package performs bipartite record linkage using a comparison-based approach. Specifically, for each pair of records that are potential matches, the package generates comparison vectors for each field, which quantify how similar the fields are. The function `compare_records` in the `vabl` package takes two datasets as input and produces comparison vectors based on the following user-provided arguments:
+
+- `fields`: The fields to be compared.
+- `types`: The comparison types used to create the comparison vectors.
+- `breaks`: A vector of cut points used to discretize the comparisons.
+
+To elaborate, the `compare_records` function operates as follows:
+
+First, it creates a `breaklist`, which stores the `breaks` for each field. If the `breaks` argument is of type double, all fields share the same set of cut points. Conversely, if `breaks` is a list, each field will have its own set of cut points for discretization. The `breaklist` argument is a list with as many elements as there are fields being compared, and the elements of `breaks` must correspond to the order of the columns in the datasets.
+
+For each field, the cut points `breaks[[f]] = c(cut_1, ..., cut_L)` divide the range of comparisons into \(L+1\) intervals: \(I_0 = (-\infty, cut_1]\), \(I_1 = (cut_1, cut_2]\), ..., \(I_L = (cut_L, \infty]\). In this way the raw comparisons are replaced with indicators corresponding to which interval they fall into. The interval \(I_0\) indicates the lowest level of disagreement, while \(I_L\) indicates the highest. Following [@aleshin2023multifile], we use the cut points `c(0, 0.25, 0.5)` as the default for string comparisons.
+
+Next, the function loops over all fields. In each iteration, a comparison method from `types` is applied to the corresponding fields in the two datasets. For example, binary fields are compared using binary equality (`bi`), character fields are compared using Levenshtein distance (`lv`), computed as 1 - Levenshtein similarity (see 
+<https://en.wikipedia.org/wiki/Levenshtein_distance>), and numerical fields are compared using absolute differences (`nu`). These distance scores are then categorized into levels based on the predefined cut points in the `breaklist`. For instance, a break with cut points `c(0, 0.25, 0.5)` would divide the string comparisons into four intervals: \(I_0 = (-\infty, 0]\) (exact match), \(I_1 = (0, 0.25]\), \(I_2 = (0.25, 0.5]\), and \(I_3 = (0.5, 1]\) (highest disagreement).
+
+Afterward, one-hot encoding is applied to each comparison result. For each comparison, a level is set to 1 if the result belongs to that level, and 0 otherwise. The one-hot encoded matrix for each field has `n1*n2` rows (where `n1` and `n2` are the number of records in the two datasets) and `n_levels` columns (representing the number of disagreement levels for that field).
+
+Finally, the comparison results for all fields are concatenated into a single matrix, `gamma`, which has dimensions \( (n1 \times n2) \times \sum_{i=1}^{F} n_{\text{levels}}[i] \), where `F` is the number of fields.
+
+The function outputs a list (`cd`) containing:
+
+- `gamma`: A one-hot encoded comparison matrix.
+- `n1`, `n2`: The number of rows in the two datasets.
+- `nDisagLevs`: The number of levels of disagreement for each field.
+
+These values can be accessed via `cd$gamma`, `cd$n1`, `cd$n2`, and `cd$nDisagLevs`, respectively.
+
+
+<!-- For instance, a break with threshold (0, 0.15) indicates distance smaller or equal to 0 (i.e. exact match) will be categorized into the lowest disagreement level, distances that fall between 0 and 0.15 are categorized as medium disagreement (i.e. potential match), while distance \> 0.15 are categorized as the highest disagreement (i.e. non match). -->
+
+In the `RL10000` dataset example, we model the comparison vectors for the name attributes (`fname_c1` and `lname_c1`) using string comparisons. For the date attributes (`by`, `bm`, and `bd`), we apply binary equality. Additionally, we use the `tictoc` package to track the time taken to create the comparison vectors:
+
+```{r}
+fields <- c(1, 3, 5, 6, 7)
+types <- c("lv", "lv", "bi", "bi", "bi")
+breaks <- c(0, .25, .5)
+```
+
+
+```{r}
+start <- tic()
+cd <- compare_records(df1, df2, fields = fields, types = types,
+                      breaks = breaks)
+compare_time <- unname(toc(quiet = T)$toc - start)
+compare_time
+```
+
+# Hashing
+
+We then apply hashing to the created comparison vectors using the `hash_comparisons` function from the `vabl` package. This function takes a list of comparison data (`cd`), including the one-hot encoded comparison matrix, and creates hash values based on one of the algorithms specified by the user (`vabl`, `fabl`, `BRL_hash`, or `FS`). 
+
+The behavior of the `hash_comparisons` function depends on 
+
+- `cd`: a list of comparison data), including the one-hot encoded comparison matrix
+- `algorithm`: the algorithms specified by the user (`vabl`, `fabl`, `BRL_hash`, or `FS`)
+- `R`: Storage efficient indexing ("SEI") [@kundinger2024efficient] is executed for algoithms `fabl` and `BRL_hash` if the parameter `R > 0`
+- `all_patterns`: When `all_patterns = TRUE`, the function generates all possible patterns from the comparison data. Otherwise, if `all_patterns = FALSE`, it computes only the unique patterns found in the data. 
+- `store_pair_to_pattern`: When `store_pair_to_pattern = TRUE`, we store the mapping of record pairs to patterns.
+
+
+To elaborate, the hashing process works as follows:
+
+The function begins by extracting the elements from the comparison data list (`cd`). The one-hot encoded comparison matrix is recorded as `indicators`, while the number of records in the two datasets and the number of disagreement levels for each field are captured as `n1`, `n2`, and `levels`, respectively. The disagreement levels for each field (`levels`) are structured as \(L_1, L_2, ..., L_F\) for the \(F\) fields being compared. To facilitate the hashing process, the `field_maker` function expands these levels into a vector of length \(\sum_i L_i\), and `Lf_vec` is used to track the boundaries between fields, documenting where each field begins and ends in the comparison matrix.
+
+Hash values are then computed for each field using an auxiliary function, `hash_field()`, which assigns progressively larger hash values to the levels within each field. To prevent overlap in the hash values between fields, an offset is added to the hash values of later fields. The resulting hash values for each field are stored in `hash_val`, and the overall hash for each comparison is computed by summing the row-wise products of `hash_val` and the corresponding `indicators` from the comparison matrix.
+
+If `all_patterns = TRUE`, the function generates all possible patterns by creating an exhaustive list of potential patterns using the `possible_patterns_ohe()` function and computing their hashes. If `all_patterns = FALSE`, it computes the unique hash values found in the data (using `unique(hash)`) and extracts the corresponding patterns from the one-hot encoded matrix. Each record is then assigned a `hash_id` that labels it with its respective pattern. Records are grouped by these hashed patterns, and the function counts how many records belong to each pattern. Additionally, a lookup table (`pattern_lookup`) is created to map each record to its respective pattern, which is useful for later analysis.
+
+The function also behaves differently depending on the algorithm selected. For the `BRL_hash` algorithm, it maps record pairs to their corresponding patterns via a `pair_to_pattern` mapping. In the case of the `vabl` algorithm, records with only one eligible pattern are flagged. For the `fabl` and `BRL_hash` algorithms, additional processing is applied to the hashed data, storage efficient indexing ("SEI") is executed if the parameter `R > 0`.
+
+Finally, the function organizes the results into a few key outputs:
+
+- `OHE (unique_patterns)`: The one-hot encoded matrix of the unique comparison patterns that were generated. If `all_patterns = TRUE`, this will contain all possible patterns; otherwise, it will contain only the unique patterns observed in the data.
+- `total_counts`: A vector that contains the total count of records per unique hash value (`hash_id`).
+- `hash_count_list`: A grouped list of the number of records per hashed pattern. This list allows us to count how often each pattern appears for each record in the second dataset.
+- `hash_to_file_1`: A data frame that groups records based on the second dataset (`rec2`) and the hashed pattern (`hash_id`). Each unique combination of these identifiers will have its associated records nested within the data frame, along with a count of how many records are associated with each combination.
+- `flags`: If the `vabl` algorithm is used, `flags` provides a list of records that have only one eligible pattern. 
+- `filed_marker`: A vector that assigns each field an identifier, indicating which levels correspond to which fields.
+- `pair_to_pattern`: If the `BRL_hash` algorithm is used, this output provides a list of mappings between record pairs and their respective patterns. 
+- `hash_id`: A vector that assigns a unique pattern identifier to each record, based on the calculated hash values. 
+
+
+
+Below is an example of how the hash values are computed for the `RLdata10000` dataset:
+
+
+```{r}
+start <- tic()
+hash <- hash_comparisons(cd, all_patterns = F)
+hash_time <- unname(toc(quiet = T)$toc - start)
+hash_time
+```
+
+# Running the algorithm
+All that remains is to run the model evaluaute the output. We run the `vabl` function in the `vabl` package to get the output using `vabl` alorithm. The results are 
+
+
+```{r}
+out_vabl <- vabl(hash)
+```
+
+
+Similarly, if we want to run the `svabl` algorithm, we will use the `sval` function in the `vabl` package.
+
+```{r}
+out_svabl <- svabl(hash, B = 100, k = 1, tau = 1)
+```
+
+
+We can obtain a point estimate using the following code:
+
+```{r, eval=TRUE}
+results_vabl <- estimate_links(out_vabl, hash)
+```
+
+```{r, eval=TRUE}
+results_svabl <- estimate_links(out_svabl, hash)
+```
+
+we evaluate the obtained point estimate with respect to the true matching.
+
+```{r, eval=TRUE}
+Z_true <- rep(0, nrow(df1))
+Z_true[1:duplicates] <- 1:duplicates
+```
+
+```{r}
+eval_vabl <- evaluate_links(results_vabl$Z_hat, Z_true, n1)
+eval_vabl
+```
+
+```{r}
+eval_svabl <- evaluate_links(results_svabl$Z_hat, Z_true, n1)
+eval_svabl
+```
+
+# Compare Inference Time
+Finally, we plot and compare the inference time of `svabl` and `vabl` with two experiments.
+
+In the first experiment, we examine inference time when n1 and n2 both increases
+
+```{r}
+# compute comparisons ahead of time
+cd <- compare_records(df1, df2, fields = fields, types = types, breaks = breaks)
+```
+
+```{r}
+# experiment 1
+result_vabl_c1 = data.frame()
+result_svabl_100_c1 = data.frame()
+result_svabl_500_c1 = data.frame()
+
+# progress bar
+pb <- txtProgressBar(min = 0, max = length(seq(500, 4500, by = 100)), style = 3)
+
+for (i in seq(500, 4500, by = 100)) {
+  n1 = i
+  n2 = i
+  
+  # extract subset from a total of n1*n2 comparisons
+  cd_subset = list()
+  cd_subset$comparisons = cd$comparisons[1:(n1*n2),]
+  cd_subset$n1 = n1
+  cd_subset$n2 = n2
+  cd_subset$nDisagLevs = cd$nDisagLevs
+
+  hash <- hash_comparisons(cd_subset, all_patterns = F)
+
+  # vabl
+  ptm <- proc.time()
+  out <- vabl(hash)
+  seconds <- proc.time() - ptm
+
+  vabl_df <- data.frame(n1 = n1,
+                         n2 = n2,
+                         iterations = out$t,
+                         time = seconds[3],
+                         method = "vabl",
+                         data = "RLdata10000")
+  result_vabl_c1 = rbind(result_vabl_c1, vabl_df)
+
+  # svabl
+  ptm <- proc.time()
+  out <- svabl(hash, B = 100, k = 1, tau = 1)
+  seconds <- proc.time() - ptm
+
+  svabl_100_df <- data.frame(n1 = n1,
+                         n2 = n2,
+                         iterations = out$t,
+                         time = seconds[3],
+                         method = "svabl",
+                         data = "RLdata10000")
+  result_svabl_100_c1 = rbind(result_svabl_100_c1, svabl_100_df)
+  
+  setTxtProgressBar(pb, which(seq(500, 4500, by = 100) == i))
+}
+
+close(pb)
+```
+
+```{r}
+# plot result
+result_combined_c1 <- bind_rows(result_vabl_c1, result_svabl_100_c1)
+
+# sort labels 
+result_combined_c1$x_label <- factor(
+  paste(result_combined_c1$n1, result_combined_c1$n2, sep = ","),
+  levels = paste(sort(unique(c(result_combined_c1$n1, result_combined_c1$n2))), 
+                 sort(unique(c(result_combined_c1$n1, result_combined_c1$n2))), 
+                 sep = ",")
+)
+
+ggplot(result_combined_c1, 
+       aes(x = x_label, 
+           y = time, 
+           color = method, 
+           group = method)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "n1, n2", 
+       y = "Inference Time (seconds)", 
+       title = "Inference Time Comparison: n1 and n2 both increase") +
+  theme_minimal() +
+  scale_x_discrete(breaks = levels(result_combined_c1$x_label)[seq(1,length(levels(result_combined_c1$x_label)), by = 5)])
+```
+
+In the second experiment, we examine inference time when n1 increases but and n2 fixed to 500.
+
+```{r}
+result_vabl_c2 = data.frame()
+result_svabl_100_c2 = data.frame()
+result_svabl_500_c2 = data.frame()
+
+pb <- txtProgressBar(min = 0, max = length(seq(500, 4800, by = 100)), style = 3)
+
+# n2 = 500
+for (i in seq(500, 4800, by = 100)) {
+  n1 = i
+  
+  # select subset
+  cd_subset = list()
+  cd_subset$comparisons = cd$comparisons[1:(n1*500),]
+  cd_subset$n1 = n1
+  cd_subset$n2 = n2
+  cd_subset$nDisagLevs = cd$nDisagLevs
+  
+  hash <- hash_comparisons(cd_subset, all_patterns = F)
+
+  # vabl
+  ptm <- proc.time()
+  out <- vabl(hash)
+  seconds <- proc.time() - ptm
+
+  vabl_df <- data.frame(n1 = n1,
+                         n2 = n2,
+                         iterations = out$t,
+                         time = seconds[3],
+                         method = "vabl",
+                         data = "RLdata10000")
+  result_vabl_c2 = rbind(result_vabl_c2, vabl_df)
+
+  # svabl - 100
+  ptm <- proc.time()
+  out <- svabl(hash, B = 100, k = 1, tau = 1)
+  seconds <- proc.time() - ptm
+
+  svabl_100_df <- data.frame(n1 = n1,
+                         n2 = n2,
+                         iterations = out$t,
+                         time = seconds[3],
+                         method = "svabl",
+                         data = "RLdata10000")
+  result_svabl_100_c2 = rbind(result_svabl_100_c2, svabl_100_df)
+  
+  # update progress bar
+  setTxtProgressBar(pb, which(seq(500, 4800, by = 100) == i))
+}
+
+close(pb)
+```
+
+
+```{r}
+# plot result
+result_combined_c2 <- bind_rows(result_vabl_c2, result_svabl_100_c2)
+
+result_combined_c2$x_label <- factor(
+  paste(result_combined_c2$n1),
+  levels = paste(sort(unique(c(result_combined_c2$n1, result_combined_c2$n2))))
+)
+
+ggplot(result_combined_c2, 
+       aes(x = x_label, 
+           y = time, 
+           color = method, 
+           group = method)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "n1", 
+       y = "Inference Time (seconds)", 
+       title = "Inference Time Comparison: n1 increase, n2 = 500") +
+  theme_minimal() +
+  scale_x_discrete(breaks = levels(result_combined_c2$x_label)[seq(1, length(levels(result_combined_c2$x_label)), by = 5)])
+
+```
+
+## References
+

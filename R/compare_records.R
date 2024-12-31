@@ -1,117 +1,128 @@
-#' @export
+#' Compare Records Between Two Data Frames
 #'
+#' This function takes two data frames and computes comparisons across specified
+#' fields. It returns a one-hot encoded matrix of disagreement levels (comparisons)
+#' and other metadata (e.g., number of records in each data frame).
+#'
+#' Internally, this function relies on three helper functions:
+#' \enumerate{
+#'   \item \code{\link{create_breaklist}} to generate numeric cut points.
+#'   \item \code{\link{compute_string_distance}} for string-based distance calculations.
+#'   \item \code{\link{one_hot_encode_factor}} to convert factor comparisons to one-hot encoded form.
+#' }
+#'
+#' @param df1 A data frame containing the first set of records.
+#' @param df2 A data frame containing the second set of records.
+#' @param fields A character vector of field names that exist in both \code{df1} and \code{df2}.
+#' @param fields_1 A character vector of field names for \code{df1}. Defaults to \code{fields}.
+#' @param fields_2 A character vector of field names for \code{df2}. Defaults to \code{fields}.
+#' @param types A character vector specifying the comparison type for each field:
+#'   \code{"bi"} (binary comparison), \code{"lv"} (string distance), \code{"nu"} (numeric).
+#' @param breaks Either a numeric vector or a list of numeric vectors giving cut
+#'   points for discretizing numeric or string distances. Defaults to \code{c(0, 0.25, 0.5)}.
+#'   \itemize{
+#'     \item If \code{breaks} is a numeric vector, the same breakpoints
+#'       are applied to all fields.
+#'     \item If \code{breaks} is a list, each element of the list must
+#'       correspond to each field in \code{fields}.
+#'   }
+#' @param distance_metric A string specifying how to compute string distance,
+#'   either \code{"Levenshtein"} or \code{"Damerau-Levenshtein"}. Defaults to
+#'   \code{"Levenshtein"}. Ignored for binary and numeric fields.
+#'
+#' @return A list containing:
+#' \describe{
+#'   \item{\code{comparisons}}{A matrix of one-hot encoded comparisons (disagreement levels).}
+#'   \item{\code{n1}}{Number of rows in \code{df1}.}
+#'   \item{\code{n2}}{Number of rows in \code{df2}.}
+#'   \item{\code{nDisagLevs}}{A vector indicating the number of disagreement levels per field.}
+#' }
+#'
+#' @examples
+#' # Example: comparing color (binary, "bi") and size (numeric, "nu") between two sets
+#' df1 <- data.frame(color = c("red", "blue"), size = c(1.1, 2.0))
+#' df2 <- data.frame(color = c("red", "red"),  size = c(1.3, 2.1))
+#'
+#' # Using default breaks for numeric (c(0, 0.25, 0.5))
+#' compare_records(df1, df2, fields = c("color", "size"), types = c("bi", "nu"))
+#'
+#' @export
 compare_records <- function(df1, df2, fields,
-                               fields_1 = fields, fields_2 = fields,
-                               types = rep("bi", length(fields)),
-                               #breaks = rep(list(NA), length(types)),
-                            breaks = c(0, .25, .5),
-                               distance_metric = "Levenshtein"){
-
+                            fields_1        = fields,
+                            fields_2        = fields,
+                            types           = rep("bi", length(fields)),
+                            breaks          = c(0, 0.25, 0.5),
+                            distance_metric = "Levenshtein") {
+  # Number of records in each data frame
   n1 <- nrow(df1)
   n2 <- nrow(df2)
-  FF <- length(fields)
 
-  if(typeof(breaks) == "double"){
-    breaklist <- rep(list(c(-Inf, breaks, Inf)), length(types))
+  # Number of fields to compare
+  num_fields <- length(fields)
 
-  }
-  if(typeof(breaks) == "list"){
-    breaklist <- rep(list(NA), length(types))
-    for(f in 1:FF){
-      breaklist[[f]] <- unique(c(-Inf, breaks[[f]], Inf))
-    }
-  }
-  # else if (typeof(breaks) == "list"){
-  #   breaklist <- rep(list(NA), length(types))
-  #
-  #   for(f in 1:FF){
-  #     if(types[f] == "lv" & is.na(breaks[[f]])){
-  #       breaklist[[f]] <- c(0, .25, .5)
-  #     }
-  #     if(types[f] == "lv"){
-  #       breaklist[[f]] <- c(-Inf, breaks[[f]], Inf)
-  #     }
-  #     if(types[f] == "nu" & is.na(breaks[[f]])){
-  #       breaklist[[f]] <- c(0, 1)
-  #     }
-  #     if(types[f] == "nu"){
-  #       breaklist[[f]] <- c(-Inf, breaks[[f]], Inf)
-  #     }
-  #   }
-  # }
+  # Create a list of breakpoints for each field
+  breaklist <- create_breaklist(breaks, types)
 
+  # Generate all pairwise combinations of rows (df1) x rows (df2)
+  all_pairs <- expand.grid(idx_df1 = seq_len(n1),
+                           idx_df2 = seq_len(n2))
+  idx_df1 <- all_pairs$idx_df1
+  idx_df2 <- all_pairs$idx_df2
 
+  # Store factor comparisons in a list
+  comparisons_list <- vector("list", length = num_fields)
 
-  # breaks_lv <- unique(c(-Inf, breaks_lv, Inf))
-  # breaks_nu <- unique(c(-Inf, breaks_nu, Inf))
+  # For each field, compute the comparison factor
+  for (f in seq_len(num_fields)) {
+    field_type <- types[f]
+    vec1 <- df1[idx_df1, fields_1[f]]
+    vec2 <- df2[idx_df2, fields_2[f]]
 
-  ids <- expand.grid(1:n1, 1:n2)
-  ids_1 <- ids[, 1]
-  ids_2 <- ids[, 2]
-  comparisons <- vector(mode = "list", length = FF)
-  ohe <- vector(mode = "list", length = FF)
+    if (field_type == "bi") {
+      # Binary comparison:
+      #  comp = 1 if mismatch, 2 if match (or vice versa, depending on your convention)
+      comp <- as.integer(!(vec1 == vec2)) + 1
+      comparisons_list[[f]] <- factor(comp)
 
-  # FS agreement levels
-  for(f in 1:FF){
-    if(types[f] == "bi"){
-      comp <- df1[ids_1, fields_1[f]] == df2[ids_2, fields_2[f]]
-      comp <- (!comp) + 1
-      comparisons[[f]] <- factor(comp)
-    }
-    if(types[f] == "lv"){
-      if(distance_metric == "Levenshtein"){
-        distance <- 1 - RecordLinkage::levenshteinSim(as.character(df1[ids_1, fields_1[f]]),
-                                       as.character(df2[ids_2, fields_2[f]]))
-      }
-      if(distance_metric == "Damerau-Levenshtein"){
-      # Damerau-Levenshtein distance, so transpositions count as 1.
-      # In contrast, BRL uses standard Levenshtein, so transpositions count as 2
-      distance <- 1 - levitate::lev_ratio(as.character(df1[ids_1, fields_1[f]]),
-                                          as.character(df2[ids_2, fields_2[f]]),
-                                          useNames = F)
-      }
+    } else if (field_type == "lv") {
+      # String distance (Levenshtein or Damerau-Levenshtein)
+      dist_vals <- compute_string_distance(vec1, vec2, distance_metric)
+      comp <- cut(dist_vals,
+                  breaks = breaklist[[f]],
+                  include.lowest = TRUE) |>
+        as.integer() |>
+        factor(levels = seq_len(length(breaklist[[f]]) - 1))
 
-      comp <- cut(distance,
-                  breaks = breaklist[[f]]) %>%
-        as.integer() %>%
-        factor(., seq_len(length(breaklist[[f]]) - 1))
-      comparisons[[f]] <- comp
+      comparisons_list[[f]] <- comp
 
-    }
+    } else if (field_type == "nu") {
+      # Numeric distance
+      dist_vals <- abs(as.numeric(vec1) - as.numeric(vec2))
+      comp <- cut(dist_vals,
+                  breaks = breaklist[[f]],
+                  include.lowest = TRUE) |>
+        as.integer() |>
+        factor(levels = seq_len(length(breaklist[[f]]) - 1))
 
-    if(types[f] == "nu"){
-      distance <- abs(df1[ids_1, fields_1[f]] - df2[ids_2, fields_2[f]])
-      comp <- cut(distance,
-                  breaks = breaklist[[f]]) %>%
-        as.integer( ) %>%
-        factor(., seq_len(length(breaklist[[f]]) - 1))
-      comparisons[[f]] <- comp
+      comparisons_list[[f]] <- comp
+
+    } else {
+      stop("Unsupported field type: must be 'bi', 'lv', or 'nu'.")
     }
   }
 
-  n_levels <- lapply(comparisons, levels) %>%
-    sapply(., length)
+  # Compute how many levels each field produces
+  n_levels <- sapply(comparisons_list, nlevels)
 
-  # Convert to one-hot encoding
-  # TODO: Test for speed vs onehot encoding function, or lapply
-  for(f in 1:FF){
-    ohe[[f]] <- matrix(0, nrow = n1 * n2, ncol = n_levels[f])
-    for(ell in 1:n_levels[f]){
-      ohe[[f]][comparisons[[f]] == ell, ell] <- 1
-    }
-  }
+  # Build one-hot encoding for each field and combine
+  ohe_list <- lapply(comparisons_list, one_hot_encode_factor)
+  gamma_matrix <- do.call(cbind, ohe_list)
 
-
-
-  gamma <- do.call(cbind, ohe)
-
-  # Might be useful for compatibility with other packages
-  # gamma_fs <- do.call(cbind, comparisons) %>%
-  #   data.frame()
-
-  out <- list(comparisons = gamma,
-              n1 = n1,
-              n2 = n2,
-              nDisagLevs = n_levels)
-
+  # Return results in a named list
+  list(
+    comparisons = gamma_matrix,
+    n1          = n1,
+    n2          = n2,
+    nDisagLevs  = n_levels
+  )
 }

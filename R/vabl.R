@@ -1,134 +1,143 @@
-#' @export
+#' Variational Algorithm for Bipartite Linkage (Original Version)
 #'
-
+#' This function implements a variational inference procedure for bipartite record
+#' linkage, with the option to either run until convergence (based on a relative
+#' ELBO threshold) or for a fixed number of iterations.
+#'
+#' @param hash A list containing:
+#'   \describe{
+#'     \item{\code{ohe}}{A \code{P x L} matrix (0/1) of unique patterns.}
+#'     \item{\code{total_counts}}{A numeric vector of length \code{P}, representing
+#'       how many times each pattern occurs.}
+#'     \item{\code{hash_count_list}}{A list of length \code{n2}, each element is
+#'       a numeric vector of length \code{P} counting how many times each pattern
+#'       is observed for that record.}
+#'     \item{\code{field_marker}}{An integer vector of length \code{L}, labeling
+#'       each column to a specific field index.}
+#'     \item{\code{n1}}{Number of records in the first data set.}
+#'     \item{\code{n2}}{Number of records in the second data set.}
+#'   }
+#' @param threshold A numeric threshold for checking convergence of the ELBO
+#'   (relative change). Defaults to \code{1e-6}.
+#' @param tmax An integer specifying the maximum number of iterations to run.
+#'   Defaults to \code{1000}.
+#' @param fixed_iterations An integer. If \code{NULL} (default), the algorithm
+#'   uses \code{threshold} to check convergence. If a positive integer is supplied,
+#'   the algorithm ignores \code{threshold} and runs exactly that many iterations
+#'   (unless \code{tmax} is exceeded).
+#' @param b_init Logical. If \code{TRUE}, initializes \code{b} by summing over
+#'   patterns weighted by \code{total_counts}, else \code{b} is a vector of ones.
+#'   Defaults to \code{TRUE}.
+#' @param check_every An integer indicating how often to check for convergence
+#'   (every \code{check_every} iterations). Defaults to \code{10}.
+#' @param store_every An integer indicating how often to compute/store the
+#'   Evidence Lower BOund (ELBO). Defaults to the same as \code{check_every}.
+#'
+#' @return A list containing:
+#' \describe{
+#'   \item{\code{pattern_weights}}{A numeric vector \code{phi} of length \code{P}
+#'     representing the final weights for each pattern.}
+#'   \item{\code{C}}{A numeric vector of length \code{n2} representing the
+#'     normalization constants per record.}
+#'   \item{\code{a,b}}{Numeric vectors of length \code{L}, the updated Dirichlet
+#'     parameters for matching and non-matching.}
+#'   \item{\code{a_pi,b_pi}}{Scalars for the Beta parameters controlling the
+#'     probability of linking.}
+#'   \item{\code{elbo_seq}}{A numeric vector storing the ELBO at each stored iteration.}
+#'   \item{\code{t}}{An integer indicating the final iteration count upon exit.}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Suppose 'hash_data' is a list with the correct fields (ohe, total_counts, etc.)
+#' out <- vabl_original(hash_data, threshold=1e-6, tmax=1000)
+#' }
+#' @export
 vabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
-                           b_init = TRUE, check_every = 10, store_every = check_every){
+                          b_init = TRUE, check_every = 10, store_every = check_every){
 
-  ohe <- hash$ohe
-  P <- dim(ohe)[1]
-  total_counts <- hash$total_counts #N_p
-  hash_count_list <- hash$hash_count_list
-  field_marker <- hash$field_marker
-  n1 <- hash$n1
-  n2 <- hash$n2
+  # -----------------------------------------------------------------
+  # 1) Extract data and define priors
+  # -----------------------------------------------------------------
+  setup <- vabl_setup(hash, b_init)
+  a     <- setup$a
+  b     <- setup$b
+  a_pi  <- 1
+  b_pi  <- 1
 
-  # Priors
-  alpha <- rep(1, length(field_marker))
-  Beta <- rep(1, length(field_marker))
-  alpha_pi <- 1
-  beta_pi <- 1
+  # Additional definitions
+  alpha     <- setup$alpha
+  Beta      <- setup$Beta
+  alpha_pi  <- 1
+  beta_pi   <- 1
+  n1        <- setup$n1
+  n2        <- setup$n2
+  ohe       <- setup$ohe
+  total_counts   <- setup$total_counts
+  hash_count_list <- setup$hash_count_list
+  field_marker   <- setup$field_marker
+  P             <- setup$P
 
-  # Initialize
-    a <- rep(1, length(field_marker))
-  if(b_init == T){
-    b <- hash$ohe %>%
-      sweep(., 1, hash$total_counts, "*") %>%
-      colSums() + Beta
-  } else {
-    b = rep(1, length(field_marker))
-  }
-    a_pi <- 1
-    b_pi <- 1
-
+  # -----------------------------------------------------------------
+  # 2) Main iteration loop
+  # -----------------------------------------------------------------
   t <- 1
   ratio <- 1
   elbo_seq <- vector()
 
   while(t <= tmax){
-    a_sum <- a %>%
-      split(., field_marker) %>%
-      sapply(., sum) %>%
-      digamma(.) %>%
-      .[field_marker]
+    # (a) Compute the chunked digamma differences for a, b
+    chunk_list <- vabl_compute_chunks(a, b, field_marker)
+    a_chunk <- chunk_list$a_chunk
+    b_chunk <- chunk_list$b_chunk
 
-    a_chunk <- digamma(a) - a_sum
+    # (b) Compute m_p, u_p, weights
+    mu_list <- vabl_compute_m_u_p(ohe, a_chunk, b_chunk)
+    m_p <- mu_list$m_p
+    u_p <- mu_list$u_p
+    weights <- mu_list$weights
 
-    b_sum <- b %>%
-      split(., field_marker) %>%
-      sapply(., sum) %>%
-      digamma(.) %>%
-      .[field_marker]
-    b_chunk <- digamma(b) - b_sum
+    # (c) Compute phi, single, C
+    c_list <- vabl_compute_phi_C(m_p, u_p, weights, a_pi, b_pi, n1, hash_count_list)
+    phi      <- c_list$phi
+    single   <- c_list$single
+    C        <- c_list$C
+    total_nonmatch <- c_list$total_nonmatch
 
-    m_p <- ohe %>%
-      sweep(., 2, a_chunk, "*") %>%
-      rowSums()
-
-    u_p <- ohe %>%
-      sweep(., 2, b_chunk, "*") %>%
-      rowSums()
-
-    # w_p
-    weights = m_p - u_p
-
-    # phi_single
-    phi <- exp(digamma(a_pi) - digamma(n1) + weights)
-    single <- exp(digamma(b_pi))
-
-    # Phi_j
-    C <- sapply(hash_count_list, function(x){
-      x %*% phi + single
-    })
-
-    # S(Phi)
-    total_nonmatch <- sum(single/ C)
-
-    # N_p(Psi)
-    K <- sapply(1:n2, function(j){
+    # (d) Compute K (partial usage)
+    K <- sapply(seq_len(n2), function(j){
       hash_count_list[[j]] / C[j]
     }) %>%
       rowSums()
 
-    AZ <- ohe %>%
-      sweep(., 1, phi * K, "*") %>%
-      colSums()
+    # (e) Compute AZ, BZ
+    ab_list <- vabl_compute_ABZ(ohe, phi, K, total_counts)
+    AZ <- ab_list$AZ
+    BZ <- ab_list$BZ
 
-    BZ <- ohe %>%
-      sweep(., 1, total_counts - (phi * K), "*") %>%
-      colSums()
-
+    # (f) Update a, b, a_pi, b_pi
     a <- alpha + AZ
-    b <- Beta+ BZ
-
+    b <- Beta + BZ
     a_pi <- alpha_pi + n2 - total_nonmatch
-    b_pi <- beta_pi + total_nonmatch
+    b_pi <- beta_pi  + total_nonmatch
 
-    # ELBO
-    if(t %% store_every == 0 | t == 1){
-    elbo_pieces <- vector(length = 6)
-
-    elbo_pieces[1] <- sapply(1:n2, function(j){
-      sum(hash_count_list[[j]] *
-            (phi *(weights - log(phi) + log(C[j]))/ C[j] + u_p))
-    }) %>%
-      sum(.)
-    elbo_pieces[2] <- single * sum(1/C *log(C)) + total_nonmatch * (log(n1) - log(single)) -log(n1)*n2
-    elbo_pieces[3] <- lbeta(a_pi, b_pi) - lbeta(alpha_pi, beta_pi)
-    elbo_pieces[4] <- sapply(list(a, b), function(y){
-      split(y, field_marker) %>%
-        sapply(., function(x){
-          sum(lgamma(x)) - lgamma(sum(x))
-        })%>%
-        sum(.)
-    }) %>%
-      sum(.)
-    elbo_pieces[5] <- - sapply(list(alpha, Beta), function(y){
-      split(y, field_marker) %>%
-        sapply(., function(x){
-          sum(lgamma(x)) - lgamma(sum(x))
-        })%>%
-        sum(.)
-    }) %>%
-      sum(.)
-    elbo_pieces[6] <- sum((alpha - a) * a_chunk + (Beta - b) * b_chunk)
-    elbo <- sum(elbo_pieces)
-    elbo_seq <- c(elbo_seq, elbo)
+    # (g) Possibly compute ELBO
+    if(t %% store_every == 0 || t == 1){
+      elbo_now <- vabl_compute_elbo(
+        n2, hash_count_list, phi, weights, m_p, u_p, C, single, n1,
+        a_pi, b_pi, alpha_pi, beta_pi,
+        a, b, alpha, Beta,
+        a_chunk, b_chunk,
+        field_marker
+      )
+      elbo_seq <- c(elbo_seq, elbo_now)
     }
 
+    # (h) Check for convergence if not fixed_iterations
     if(is.null(fixed_iterations)){
-      if(t %% check_every == 0){
+      if(t %% check_every == 0 && length(elbo_seq) > 1){
         t_elbo <- length(elbo_seq)
-        ratio <- abs((elbo_seq[t_elbo] - elbo_seq[t_elbo - 1])/
+        ratio <- abs((elbo_seq[t_elbo] - elbo_seq[t_elbo - 1]) /
                        elbo_seq[t_elbo - 1])
       }
       if(ratio < threshold){
@@ -138,7 +147,7 @@ vabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
 
     t <- t + 1
     if(t > tmax){
-      print("Max iterations have passed before convergence")
+      message("Max iterations have passed before convergence")
       break
     }
 
@@ -147,10 +156,11 @@ vabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
         break
       }
     }
+  } # end while
 
-
-  }
-
+  # -----------------------------------------------------------------
+  # 3) Return final results
+  # -----------------------------------------------------------------
   list(pattern_weights = phi,
        C = C,
        a = a,
@@ -159,6 +169,4 @@ vabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
        b_pi = b_pi,
        elbo_seq = elbo_seq,
        t = t)
-
 }
-
