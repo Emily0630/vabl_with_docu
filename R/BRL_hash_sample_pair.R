@@ -33,14 +33,14 @@
 #'
 #' @examples
 #' \dontrun{
-#' result <- sample_pair(
+#' result <- BRL_hash_sample_pair(
 #'   j, Z, Z_inv, L, empty_weight, unique_weights,
 #'   pair_to_pattern, hash_count_list, hash_to_file_1,
 #'   candidates_P, mode="rejection", reject_iter=5
 #' )
 #' }
 #' @export
-sample_pair <- function(j, Z, Z_inv, L,
+BRL_hash_sample_pair <- function(j, Z, Z_inv, L,
                         empty_weight,
                         unique_weights,
                         pair_to_pattern,
@@ -86,20 +86,20 @@ sample_pair <- function(j, Z, Z_inv, L,
     # Sample a pattern from 0..P
     pat <- sample(candidates_P, 1, prob=probs)
     if (pat == 0) {
-      Z_j     <- 0
+      Z_j <- 0
       Z_pat_j <- 0
     } else {
       # We then randomly pick a df1 record among those that produce 'pat'
       # for record j
-      npj   <- n_current[pat]
+      npj <- n_current[pat]
       flag2 <- 1
       while (flag2 == 1) {
         index <- ceiling(runif(1) * npj)
-        i     <- hash_to_file_1[[j]][[pat]][index]
+        i <- hash_to_file_1[[j]][[pat]][index]
         if (Z_inv[i] == 0) {
-          Z_j     <- i
+          Z_j <- i
           Z_pat_j <- pat
-          flag2   <- 0
+          flag2 <- 0
         }
       }
     }
@@ -107,22 +107,22 @@ sample_pair <- function(j, Z, Z_inv, L,
   } else if (mode == "rejection") {
     # Repeatedly try picking a pattern from 0..P
     hash_weights <- hash_count_list[[j]] * unique_weights
-    probs        <- c(empty_weight, hash_weights)
-    flag         <- 1
-    iter         <- 0
+    probs <- c(empty_weight, hash_weights)
+    flag <- 1
+    iter <- 0
     while (flag == 1) {
       pat <- sample(candidates_P, 1, prob=probs)
       if (pat == 0) {
-        Z_j     <- 0
+        Z_j <- 0
         Z_pat_j <- 0
         flag <- 0
       } else {
-        idx   <- ceiling(runif(1) * hash_count_list[[j]][pat])
-        i     <- hash_to_file_1[[j]][[pat]][idx]
+        idx <- ceiling(runif(1) * hash_count_list[[j]][pat])
+        i <- hash_to_file_1[[j]][[pat]][idx]
         if (Z_inv[i] == 0) {
-          Z_j     <- i
+          Z_j <- i
           Z_pat_j <- pat
-          flag    <- 0
+          flag <- 0
         }
       }
       iter <- iter + 1
@@ -132,9 +132,9 @@ sample_pair <- function(j, Z, Z_inv, L,
         temp_weights <- c(empty_weight,
                           unique_weights[pair_to_pattern[[j]][available]])
         chosen <- sample(c(0, available), 1, prob=temp_weights)
-        Z_j     <- chosen
+        Z_j <- chosen
         Z_pat_j <- if (chosen > 0) pair_to_pattern[[j]][chosen] else 0
-        flag    <- 0
+        flag <- 0
       }
     }
   }

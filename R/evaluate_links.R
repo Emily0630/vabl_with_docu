@@ -37,10 +37,10 @@
 #' @export
 evaluate_links <- function(estimated_links, true_links, size_file1){
   # Calculate how many predicted links (i) are within the range 1..size_file1
-  # and also greater than 0 => i.e., a predicted match
+  # and also greater than 0 i.e., a predicted match
   num_predicted_links <- sum(estimated_links <= size_file1 & estimated_links > 0)
 
-  # Calculate how many true matches are within 1..size_file1 and > 0 => actual matches
+  # Calculate how many true matches are within 1..size_file1 and > 0 i.e., actual matches
   num_true_matches <- sum(true_links <= size_file1 & true_links > 0)
 
   # Calculate how many predicted links are exactly correct

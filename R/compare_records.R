@@ -2,17 +2,18 @@
 #'
 #' This function takes two data frames and computes comparisons across specified
 #' fields. It returns a one-hot encoded matrix of disagreement levels (comparisons)
-#' and other metadata (e.g., number of records in each data frame).
+#' and other metadata (number of records in each data frame and a vector of the number
+#' of disagreement levels per field.).
 #'
-#' Internally, this function relies on three helper functions:
+#' This function relies on three helper functions:
 #' \enumerate{
 #'   \item \code{\link{create_breaklist}} to generate numeric cut points.
 #'   \item \code{\link{compute_string_distance}} for string-based distance calculations.
 #'   \item \code{\link{one_hot_encode_factor}} to convert factor comparisons to one-hot encoded form.
 #' }
 #'
-#' @param df1 A data frame containing the first set of records.
-#' @param df2 A data frame containing the second set of records.
+#' @param df1 A data frame containing the first file of records.
+#' @param df2 A data frame containing the second file of records.
 #' @param fields A character vector of field names that exist in both \code{df1} and \code{df2}.
 #' @param fields_1 A character vector of field names for \code{df1}. Defaults to \code{fields}.
 #' @param fields_2 A character vector of field names for \code{df2}. Defaults to \code{fields}.
@@ -23,8 +24,8 @@
 #'   \itemize{
 #'     \item If \code{breaks} is a numeric vector, the same breakpoints
 #'       are applied to all fields.
-#'     \item If \code{breaks} is a list, each element of the list must
-#'       correspond to each field in \code{fields}.
+#'     \item If \code{breaks} is a list, each element of the list corresponds
+#'       to each field in \code{fields}.
 #'   }
 #' @param distance_metric A string specifying how to compute string distance,
 #'   either \code{"Levenshtein"} or \code{"Damerau-Levenshtein"}. Defaults to
@@ -39,19 +40,18 @@
 #' }
 #'
 #' @examples
-#' # Example: comparing color (binary, "bi") and size (numeric, "nu") between two sets
-#' df1 <- data.frame(color = c("red", "blue"), size = c(1.1, 2.0))
-#' df2 <- data.frame(color = c("red", "red"),  size = c(1.3, 2.1))
-#'
+#' # Example: two datasets with fields name (string distance, "lv") and birth_year (numeric, "nu")
+#' df1 <- data.frame(name = c("Alice", "Bob"), birth_year  = c(1980, 1990))
+#' df2 <- data.frame(name = c("Alice", "John"), birth_year  = c(1981, 1992))
 #' # Using default breaks for numeric (c(0, 0.25, 0.5))
-#' compare_records(df1, df2, fields = c("color", "size"), types = c("bi", "nu"))
-#'
+#' compare_records(df1, df2, fields = c("name", "birth_year"), types = c("lv", "nu"))
 #' @export
+
 compare_records <- function(df1, df2, fields,
-                            fields_1        = fields,
-                            fields_2        = fields,
-                            types           = rep("bi", length(fields)),
-                            breaks          = c(0, 0.25, 0.5),
+                            fields_1 = fields,
+                            fields_2 = fields,
+                            types = rep("bi", length(fields)),
+                            breaks = c(0, 0.25, 0.5),
                             distance_metric = "Levenshtein") {
   # Number of records in each data frame
   n1 <- nrow(df1)
@@ -80,7 +80,7 @@ compare_records <- function(df1, df2, fields,
 
     if (field_type == "bi") {
       # Binary comparison:
-      #  comp = 1 if mismatch, 2 if match (or vice versa, depending on your convention)
+      # comp = 1 if mismatch, 2 if match
       comp <- as.integer(!(vec1 == vec2)) + 1
       comparisons_list[[f]] <- factor(comp)
 
@@ -119,10 +119,8 @@ compare_records <- function(df1, df2, fields,
   gamma_matrix <- do.call(cbind, ohe_list)
 
   # Return results in a named list
-  list(
-    comparisons = gamma_matrix,
-    n1          = n1,
-    n2          = n2,
-    nDisagLevs  = n_levels
-  )
+  list(comparisons = gamma_matrix,
+       n1 = n1,
+       n2 = n2,
+       nDisagLevs = n_levels)
 }

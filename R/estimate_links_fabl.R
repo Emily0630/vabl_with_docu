@@ -27,7 +27,7 @@
 #' @export
 estimate_links_fabl <- function(out, n1) {
   Z_samps <- out$Z
-  n2      <- nrow(Z_samps)
+  n2 <- nrow(Z_samps)
 
   # Ensure no references exceed n1+1
   # e.g. if some sample says "6" when n1=5 => clamp it to 6 => no link
@@ -48,9 +48,8 @@ estimate_links_fabl <- function(out, n1) {
     dist
   })
 
-  # Probability of no link => sum of distribution for names >= n1+1
-  # OR we interpret "n1+1" as the no-link label
-  # If we want to interpret "n1+1" specifically as no link:
+  # Probability of no link
+  # We interpret "n1+1" as the no-link label
   prob_no_link <- sapply(probs_list, function(dist) {
     # find distribution mass for name == n1+1
     # if dist is empty or no name matches, sum(...)=0
@@ -60,7 +59,6 @@ estimate_links_fabl <- function(out, n1) {
   })
 
   # best_match => label with max distribution
-  # We'll do a safe approach:
   best_match <- sapply(probs_list, function(dist) {
     if (length(dist) == 0) {
       return(0)  # if no data => best match=0 or something
@@ -91,11 +89,11 @@ estimate_links_fabl <- function(out, n1) {
   Z_hat <- rep(0, n2)
 
   list(
-    best_match     = best_match,
+    best_match = best_match,
     prob_best_match= prob_best_match,
-    prob_no_link   = prob_no_link,
+    prob_no_link = prob_no_link,
     link_indicator = link_indicator,
-    n2             = n2,
-    Z_hat          = Z_hat
+    n2 = n2,
+    Z_hat = Z_hat
   )
 }

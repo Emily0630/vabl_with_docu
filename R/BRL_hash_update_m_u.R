@@ -23,11 +23,11 @@
 #'
 #' @examples
 #' \dontrun{
-#' res <- update_m_u(unique_patterns, pattern_counts, matches,
+#' res <- BRL_hash_update_m_u(unique_patterns, pattern_counts, matches,
 #'                   field_marker, m_prior = 1, u_prior = 1)
 #' }
 #' @export
-update_m_u <- function(unique_patterns, pattern_counts, matches,
+BRL_hash_update_m_u <- function(unique_patterns, pattern_counts, matches,
                        field_marker, m_prior = 1, u_prior = 1) {
   # 1) Compute the matched array (AZ): sum of unique_patterns * matches
   # 2) Compute the unmatched array (BZ): sum of unique_patterns * (pattern_counts - matches)

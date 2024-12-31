@@ -1,15 +1,24 @@
-#' Estimate Record Linkage from FABL/VABL Output
+#' Estimate Record Linkage from FABL/VABL/SVABL Output
 #'
-#' This function takes the output from a FABL or VABL run (i.e., a set of posterior
+#' This function takes the output from a FABL or VABL or SVABL run (i.e., a set of posterior
 #' samples or pattern weights) and computes the final linkage estimates for each
 #' record in the second data set. It supports multiple labeling conventions for
 #' non-matches, threshold-based reject options, and an optional resolution pass
 #' to enforce one-to-one matching.
 #'
-#' @param out The output from either FABL or VABL. If the first named element is
+#' This function relies on five helper functions:
+#' \enumerate{
+#'   \item \code{\link{estimate_links_fabl}} to process fabl output for link estimation
+#'   \item \code{\link{estimate_links_vabl_svabl}} to process vabl/svabl output for link estimation
+#'   \item \code{\link{estimate_links_with_reject}}
+#'   \item \code{\link{estimate_links_no_reject}}
+#'   \item \code{\link{etimate_links_resolve_1to1}} to enforce one-to-one matching
+#' }
+#'
+#' @param out The output from FABL or VABL or SVABL. If the first named element is
 #'   \code{"Z"}, it is assumed to be from FABL (with posterior samples of \code{Z}).
 #'   If the first element is \code{"pattern_weights"}, it is assumed to be from
-#'   VABL (with pattern-based representation).
+#'   VABL or SVABL(with pattern-based representation).
 #' @param hash A list containing at least:
 #'   \itemize{
 #'     \item \code{n1}: number of records in the first data set
@@ -65,28 +74,28 @@ estimate_links <- function(out, hash,
       out = out,
       n1 = n1
     )
-    best_match     <- fabl_info$best_match
+    best_match <- fabl_info$best_match
     prob_best_match <- fabl_info$prob_best_match
-    prob_no_link    <- fabl_info$prob_no_link
-    link_indicator  <- fabl_info$link_indicator
-    n2              <- fabl_info$n2
-    Z_hat           <- fabl_info$Z_hat
+    prob_no_link <- fabl_info$prob_no_link
+    link_indicator <- fabl_info$link_indicator
+    n2 <- fabl_info$n2
+    Z_hat <- fabl_info$Z_hat
   }
 
   # -------------------------------------------------------------------------
-  # 3) If the first named element is "pattern_weights", assume the VABL approach
+  # 3) If the first named element is "pattern_weights", assume the VABL/SVABL approach
   # -------------------------------------------------------------------------
   else if(names(out)[1] == "pattern_weights"){
-    vabl_info <- estimate_links_vabl(
-      out         = out,
-      hash        = hash
+    vabl_info <- estimate_links_vabl_svabl(
+      out = out,
+      hash = hash
     )
-    best_match     <- vabl_info$best_match
+    best_match <- vabl_info$best_match
     prob_best_match <- vabl_info$prob_best_match
-    prob_no_link    <- vabl_info$prob_no_link
-    link_indicator  <- vabl_info$link_indicator
-    n2              <- vabl_info$n2
-    Z_hat           <- vabl_info$Z_hat
+    prob_no_link <- vabl_info$prob_no_link
+    link_indicator <- vabl_info$link_indicator
+    n2 <- vabl_info$n2
+    Z_hat <- vabl_info$Z_hat
   }
 
   # -------------------------------------------------------------------------

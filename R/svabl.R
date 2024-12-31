@@ -7,6 +7,19 @@
 #' storing the evidence lower bound (ELBO) at given intervals and can stop
 #' early based on a convergence threshold or run for a fixed number of iterations.
 #'
+#' This function relies on seven helper functions:
+#' \enumerate{
+#'   \item \code{\link{svabl_setup}} to extract data from \code{hash} and initialize the
+#'    parameters \code{a} and \code{b}
+#'   \item \code{\link{vabl_svabl_compute_chunks}} to compute digamma chunks for svabl
+#'   \item \code{\link{svabl_compute_m_u_p}} to compute m_p, u_p, and weights for svabl
+#'   \item \code{\link{svabl_compute_batch_count}} to compute batch counts for svabl
+#'   \item \code{\link{svabl_compute_K}} to compute scaled row sum of \eqn{(hash_count_list[[j]] / C[j])}
+#'    over the sampled records for svabl
+#'   \item \code{\link{svabl_update_ab}} to update a,b for svabl
+#'   \item \code{\link{vabl_svabl_compute_elbo}} to compute elbo for svabl
+#' }
+#'
 #' @param hash A list containing:
 #'   \describe{
 #'     \item{\code{ohe}}{A \code{P x L} matrix (0/1) of unique patterns.}
@@ -36,9 +49,10 @@
 #'   to \code{1}.
 #' @param tau Numeric offset for the step size. Defaults to \code{1}.
 #' @param seed An integer seed for reproducibility (default \code{0}).
-#' @param check_every Integer, how often to check convergence (default \code{10}).
-#' @param store_every Integer, how often to compute/store ELBO (default
-#'   \code{check_every}).
+#' @param check_every An integer indicating how often to check for convergence
+#'   (every \code{check_every} iterations). Defaults to \code{10}.
+#' @param store_every An integer indicating how often to compute/store the
+#'   Evidence Lower BOund (ELBO). Defaults to the same as \code{check_every}.
 #'
 #' @return A list containing:
 #' \describe{
@@ -69,22 +83,22 @@ svabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
   # ----------------------------------------------------------------
   # 1) Extract data and define priors
   # ----------------------------------------------------------------
-  setup_list  <- svabl_setup(hash, b_init)
-  a           <- setup_list$a
-  b           <- setup_list$b
-  alpha       <- setup_list$alpha
-  Beta        <- setup_list$Beta
-  alpha_pi    <- 1
-  beta_pi     <- 1
+  setup_list <- svabl_setup(hash, b_init)
+  a <- setup_list$a
+  b <- setup_list$b
+  alpha <- setup_list$alpha
+  Beta <- setup_list$Beta
+  alpha_pi <- 1
+  beta_pi <- 1
 
-  n1                <- setup_list$n1
-  n2                <- setup_list$n2
-  ohe               <- setup_list$ohe
-  field_marker      <- setup_list$field_marker
-  hash_count_list   <- setup_list$hash_count_list
-  P                 <- setup_list$P
+  n1 <- setup_list$n1
+  n2 <- setup_list$n2
+  ohe <- setup_list$ohe
+  field_marker <- setup_list$field_marker
+  hash_count_list <- setup_list$hash_count_list
+  P <- setup_list$P
 
-  # Additional initialization for Beta distribution controlling links
+  # Initialization for Beta dist
   a_pi <- 1
   b_pi <- 1
 
@@ -102,7 +116,7 @@ svabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
   while(t <= tmax){
 
     # (a) Compute the chunked digamma for a, b
-    chunk_list <- svabl_compute_chunks(a, b, field_marker)
+    chunk_list <- vabl_svabl_compute_chunks(a, b, field_marker)
     a_chunk <- chunk_list$a_chunk
     b_chunk <- chunk_list$b_chunk
 
@@ -119,8 +133,7 @@ svabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
     # (d) Sample a minibatch (size B) from the second data set
     batch_indices <- sample.int(n2, B, replace = FALSE)
 
-    # (e) For each record j in the batch, compute C[j]
-    #     then scale up by 'adjustment'
+    # (e) For each record j in the batch, compute C[j], then scale up by 'adjustment'
     C_batch <- sapply(batch_indices, function(j){
       hash_count_list[[j]] %*% phi + single
     })
@@ -129,7 +142,6 @@ svabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
     total_nonmatch <- adjustment * sum(single / C_batch)
 
     # (g) Recompute total_counts over the batch => scale up
-    #     Then N_p(B) => partial usage
     total_counts_batch <- svabl_compute_batch_counts(hash_count_list, batch_indices, adjustment)
 
     K <- svabl_compute_K(hash_count_list, batch_indices, C_batch, adjustment)
@@ -157,12 +169,10 @@ svabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
         hash_count_list[[j]] %*% phi + single
       })
       # Then compute full-data ELBO
-      new_elbo <- svabl_compute_elbo(
-        a, b, a_pi, b_pi,
-        alpha, Beta, 1, 1, # alpha_pi,beta_pi = 1,1
-        hash_count_list, n1, n2,
-        ohe, field_marker, weights, phi, single, c_full, m_p, u_p, a_chunk, b_chunk
-      )
+      new_elbo <- vabl_svabl_compute_elbo(n1, n2, hash_count_list, phi, weights,
+                                          m_p, u_p, C = c_full,single,
+                                          a_pi, b_pi, alpha_pi = 1, beta_pi = 1,
+                                          a, b, alpha, Beta, a_chunk, b_chunk, field_marker)
       elbo_seq <- c(elbo_seq, new_elbo)
     }
 
@@ -200,12 +210,12 @@ svabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
   # ----------------------------------------------------------------
   list(
     pattern_weights = phi,
-    C              = C,
-    a              = a,
-    b              = b,
-    a_pi           = a_pi,
-    b_pi           = b_pi,
-    elbo_seq       = elbo_seq,
-    t              = t
+    C = C,
+    a = a,
+    b = b,
+    a_pi = a_pi,
+    b_pi = b_pi,
+    elbo_seq = elbo_seq,
+    t = t
   )
 }

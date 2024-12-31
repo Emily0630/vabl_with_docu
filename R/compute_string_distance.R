@@ -3,10 +3,9 @@
 #' Computes pairwise string distances between two character vectors. Currently
 #' supports the \code{"Levenshtein"} or \code{"Damerau-Levenshtein"} metrics.
 #'
-#' The returned values are actually \code{1 - similarity} when the metric is
-#' Levenshtein-based. For example, if \code{distance_metric = "Levenshtein"},
-#' then the distance is calculated as \code{1 - levenshteinSim(...)}, so higher
-#' values mean more dissimilar strings.
+#' The returned values are computed as \code{1 - similarity}, specifically
+#' \code{1 - levenshteinSim(...)}, if the metric is Levenshtein. Consequently,
+#' higher values indicate greater dissimilarity.
 #'
 #' @param vec1 A character vector.
 #' @param vec2 A character vector of the same length as \code{vec1}.
@@ -30,6 +29,7 @@
 #' }
 #'
 #' @export
+
 compute_string_distance <- function(vec1, vec2, distance_metric) {
   if (distance_metric == "Levenshtein") {
     # 1 - sim => the disagreement measure
@@ -37,7 +37,6 @@ compute_string_distance <- function(vec1, vec2, distance_metric) {
                                              as.character(vec2)))
   } else if (distance_metric == "Damerau-Levenshtein") {
     # 1 - ratio from 'levitate::lev_ratio'
-    # NB: Transpositions count as 1 instead of 2 in Damerau-Levenshtein
     return(1 - levitate::lev_ratio(as.character(vec1),
                                    as.character(vec2),
                                    useNames = FALSE))

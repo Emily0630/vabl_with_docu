@@ -4,7 +4,7 @@
 #' a single list. Each \code{hash_count_list} is assumed to be a list of numeric
 #' vectors.
 #'
-#' @param hash_list A list of objects (e.g., from \code{hash_comparisons()})
+#' @param hash_list A list of objects from \code{hash_comparisons()}
 #'   that each contain a \code{hash_count_list} element.
 #'
 #' @return A single list of numeric vectors, created by flattening all

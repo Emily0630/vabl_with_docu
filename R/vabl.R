@@ -1,8 +1,19 @@
-#' Variational Algorithm for Bipartite Linkage (Original Version)
+#' Variational Algorithm for Bipartite Linkage
 #'
 #' This function implements a variational inference procedure for bipartite record
 #' linkage, with the option to either run until convergence (based on a relative
 #' ELBO threshold) or for a fixed number of iterations.
+#'
+#'This function relies on six helper functions:
+#' \enumerate{
+#'   \item \code{\link{svabl_setup}} to extract data from \code{hash} and initialize the
+#'    parameters \code{a} and \code{b}
+#'   \item \code{\link{vabl_svabl_compute_chunks}} to compute digamma chunks for vabl
+#'   \item \code{\link{vabl_compute_m_u_p}} to compute m_p, u_p, and weights for vabl
+#'   \item \code{\link{vabl_compute_phi_C}} to compute phi, single, and C for vabl
+#'   \item \code{\link{vabl_compute_ABZ}} to compute AZ, BZ for vabl
+#'   \item \code{\link{vabl_svabl_compute_elbo}} to compute elbo for vabl
+#' }
 #'
 #' @param hash A list containing:
 #'   \describe{
@@ -60,23 +71,22 @@ vabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
   # 1) Extract data and define priors
   # -----------------------------------------------------------------
   setup <- vabl_setup(hash, b_init)
-  a     <- setup$a
-  b     <- setup$b
-  a_pi  <- 1
-  b_pi  <- 1
+  a <- setup$a
+  b <- setup$b
+  a_pi <- 1
+  b_pi <- 1
 
-  # Additional definitions
-  alpha     <- setup$alpha
-  Beta      <- setup$Beta
-  alpha_pi  <- 1
-  beta_pi   <- 1
-  n1        <- setup$n1
-  n2        <- setup$n2
-  ohe       <- setup$ohe
-  total_counts   <- setup$total_counts
+  alpha <- setup$alpha
+  Beta <- setup$Beta
+  alpha_pi <- 1
+  beta_pi <- 1
+  n1 <- setup$n1
+  n2 <- setup$n2
+  ohe <- setup$ohe
+  total_counts <- setup$total_counts
   hash_count_list <- setup$hash_count_list
-  field_marker   <- setup$field_marker
-  P             <- setup$P
+  field_marker <- setup$field_marker
+  P <- setup$P
 
   # -----------------------------------------------------------------
   # 2) Main iteration loop
@@ -87,7 +97,7 @@ vabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
 
   while(t <= tmax){
     # (a) Compute the chunked digamma differences for a, b
-    chunk_list <- vabl_compute_chunks(a, b, field_marker)
+    chunk_list <- vabl_svabl_compute_chunks(a, b, field_marker)
     a_chunk <- chunk_list$a_chunk
     b_chunk <- chunk_list$b_chunk
 
@@ -99,9 +109,9 @@ vabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
 
     # (c) Compute phi, single, C
     c_list <- vabl_compute_phi_C(m_p, u_p, weights, a_pi, b_pi, n1, hash_count_list)
-    phi      <- c_list$phi
-    single   <- c_list$single
-    C        <- c_list$C
+    phi <- c_list$phi
+    single <- c_list$single
+    C <- c_list$C
     total_nonmatch <- c_list$total_nonmatch
 
     # (d) Compute K (partial usage)
@@ -123,8 +133,8 @@ vabl <- function(hash, threshold = 1e-6, tmax = 1000, fixed_iterations = NULL,
 
     # (g) Possibly compute ELBO
     if(t %% store_every == 0 || t == 1){
-      elbo_now <- vabl_compute_elbo(
-        n2, hash_count_list, phi, weights, m_p, u_p, C, single, n1,
+      elbo_now <- vabl_svabl_compute_elbo(
+        n1, n2, hash_count_list, phi, weights, m_p, u_p, C, single,
         a_pi, b_pi, alpha_pi, beta_pi,
         a, b, alpha, Beta,
         a_chunk, b_chunk,

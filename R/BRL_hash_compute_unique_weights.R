@@ -13,10 +13,10 @@
 #'
 #' @examples
 #' \dontrun{
-#' weights <- compute_unique_weights(m, u, unique_patterns)
+#' weights <- BRL_hash_compute_unique_weights(m, u, unique_patterns)
 #' }
 #' @export
-compute_unique_weights <- function(m, u, unique_patterns) {
+BRL_hash_compute_unique_weights <- function(m, u, unique_patterns) {
   # ratio: log(m) - log(u)
   ratio_vec <- log(m) - log(u)
 

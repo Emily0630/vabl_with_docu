@@ -29,10 +29,9 @@ vabl_setup <- function(hash, b_init) {
 
   alpha <- rep(1, length(field_marker))
   Beta  <- rep(1, length(field_marker))
-  a     <- rep(1, length(field_marker))
+  a <- rep(1, length(field_marker))
 
   if(b_init){
-    # identical to your inline approach
     b <- hash$ohe %>%
       sweep(1, hash$total_counts, "*") %>%
       colSums() + Beta

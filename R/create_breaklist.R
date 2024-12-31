@@ -8,9 +8,9 @@
 #' @param breaks Either a numeric vector or a list of numeric vectors. If numeric,
 #'   the breakpoints will be \code{c(-Inf, breaks, Inf)}. If a list, each list
 #'   element will be prepended by \code{-Inf} and appended by \code{Inf}.
-#' @param types A character vector indicating the comparison type for each field
-#'   (e.g., \code{"bi"}, \code{"lv"}, \code{"nu"}). Only used to replicate the
-#'   breakpoints the correct number of times.
+#' @param types A character vector specifying the comparison type for each field
+#'   (e.g., \code{"bi"} for binary, \code{"lv"} for string distance, \code{"nu"} for numeric).
+#'   The length of \code{types} determines how many times the list of breakpoints are replicated.
 #'
 #' @return A list of numeric vectors representing breakpoints for each field.
 #'

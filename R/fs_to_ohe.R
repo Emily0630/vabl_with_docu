@@ -19,7 +19,7 @@
 #' #   - field2 has 3 levels
 #' # Then field_levels = c(2, 3).
 #' # If row_values = c(1, 2), it means field1=1, field2=2.
-#' #   => fs_to_ohe(c(1,2), c(2,3)) = c(1,0, 0,1,0)
+#' #   => fs_to_ohe(c(1,2), c(2,3)) = c(1,0,0,1,0)
 #'
 #' row_values <- c(1, 2)
 #' field_levels <- c(2, 3)

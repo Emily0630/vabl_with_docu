@@ -62,7 +62,6 @@ simulate_comparisons <- function(match_probs, nonmatch_probs, field_levels,
 
   # ---------------------------------------------------------------------
   # 2) Set up total number of pairs and the grid of pair indices
-  #    N = n1 * n2 is total pair combos
   # ---------------------------------------------------------------------
   N <- size_file1 * size_file2
   pair_indices <- expand.grid(
@@ -82,12 +81,12 @@ simulate_comparisons <- function(match_probs, nonmatch_probs, field_levels,
   df2matches <- seq_len(overlap)
   df1matches <- df2matches + previous_matches
 
-  # Build a 'Ztrue' vector => length n2
-  # Non-matches => labeled n1+1
+  # Build a 'Ztrue' vector with length n2
+  # Non-matches are labeled n1+1
   Ztrue <- rep(size_file1 + 1, size_file2)
   Ztrue[df2matches] <- df1matches
 
-  # match_index => which row in pair_indices has record1 == record2+previous_matches
+  # match_index indicates which row in pair_indices has record1 == record2+previous_matches
   # We pick the first 'overlap' of them
   # e.g. if overlap=2, we want the first 2 that satisfy record1 = record2 + previous_matches
   matched_rows <- which(
@@ -96,27 +95,20 @@ simulate_comparisons <- function(match_probs, nonmatch_probs, field_levels,
 
   # ---------------------------------------------------------------------
   # 4) Split 'match_probs' & 'nonmatch_probs' by field_marker
-  #    e.g., if field_marker=c(1,1,2,2,2), we group them so each field f
-  #    has a vector of length field_levels[f].
   # ---------------------------------------------------------------------
-  # Then for each field f, 'match_list[[f]]' is the distribution over levels
-  # for that field (matching scenario).
   match_list <- split(match_probs, field_marker)
   nonmatch_list <- split(nonmatch_probs, field_marker)
 
   # ---------------------------------------------------------------------
   # 5) Generate random discrete levels for matched pairs and non-matched pairs
-  #    (based on probabilities in match_list or nonmatch_list).
-  #    We store them as 1..(field_levels[f]).
   # ---------------------------------------------------------------------
-  # gamma_match => matrix #overlap x num_fields
-  # gamma_nonmatch => matrix (N-overlap) x num_fields
+  # gamma_match is a matrix #overlap x num_fields
   gamma_match <- sapply(match_list, function(vec){
-    # 'vec' is a probability vector => sample field_levels[f] categories
-    # We sample 'overlap' times from categories = 1..length(vec)
+    # 'vec' is a probability vector to sample field_levels[f] categories
     sample.int(length(vec), overlap, replace=TRUE, prob=vec)
   })
 
+  # gamma_nonmatch is a matrix (N-overlap) x num_fields
   gamma_nonmatch <- sapply(nonmatch_list, function(vec){
     sample.int(length(vec), N - overlap, replace=TRUE, prob=vec)
   })
@@ -136,11 +128,8 @@ simulate_comparisons <- function(match_probs, nonmatch_probs, field_levels,
   }
 
   # ---------------------------------------------------------------------
-  # 7) Convert 'indicators' (which are discrete levels 1..field_levels[f])
-  #    into a big one-hot matrix 'gamma'
+  # 7) Convert 'indicators' into a big one-hot matrix 'gamma'
   # ---------------------------------------------------------------------
-  # We'll build 'ohe[[f]]' => a matrix of size (N x field_levels[f]).
-  # Then combine them horizontally.
   ohe_list <- vector("list", num_fields)
   for(f in seq_len(num_fields)){
     field_num_levels <- field_levels[f]
@@ -160,9 +149,9 @@ simulate_comparisons <- function(match_probs, nonmatch_probs, field_levels,
   # ---------------------------------------------------------------------
   list(
     comparisons = gamma,     # one-hot matrix (N x sum(field_levels))
-    n1          = size_file1,
-    n2          = size_file2,
-    nDisagLevs  = field_levels,  # same as input
-    Ztrue       = Ztrue          # length n2, the ground-truth matching
+    n1 = size_file1,
+    n2 = size_file2,
+    nDisagLevs = field_levels,  # same as input
+    Ztrue = Ztrue          # length n2, the ground-truth matching
   )
 }

@@ -15,8 +15,8 @@
 #' @return A numeric scalar, the sum of 6 pieces (the ELBO).
 #'
 #' @export
-vabl_compute_elbo <- function(
-    n2, hash_count_list, phi, weights, m_p, u_p, C, single, n1,
+vabl_svabl_compute_elbo <- function(
+    n1, n2, hash_count_list, phi, weights, m_p, u_p, C, single,
     a_pi, b_pi, alpha_pi, beta_pi,
     a, b, alpha, Beta,
     a_chunk, b_chunk,
@@ -39,7 +39,7 @@ vabl_compute_elbo <- function(
 
   # 4) part
   # sum( split(a, field_marker), sum( lgamma(...) ) - lgamma(sum(...)) )
-  posterior_ab <- sapply(list(a, b), function(y){
+  post_ab <- sapply(list(a, b), function(y){
     split(y, field_marker) %>%
       sapply(., function(x){
         sum(lgamma(x)) - lgamma(sum(x))
@@ -47,7 +47,7 @@ vabl_compute_elbo <- function(
       sum()
   }) %>%
     sum()
-
+  elbo_part4 <- post_ab
   # 5) part
   # Negative of prior piece
   prior_ab <- sapply(list(alpha, Beta), function(y){
@@ -64,5 +64,5 @@ vabl_compute_elbo <- function(
   elbo_part6 <- sum((alpha - a) * a_chunk + (Beta - b) * b_chunk)
 
   # sum all
-  sum(c(elbo_part1, elbo_part2, elbo_part3, posterior_ab, elbo_part5, elbo_part6))
+  sum(c(elbo_part1, elbo_part2, elbo_part3, elbo_part4, elbo_part5, elbo_part6))
 }

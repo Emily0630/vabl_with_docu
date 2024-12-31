@@ -1,11 +1,19 @@
 #' Hash the Comparison Data
 #'
-#' This function takes as input a comparison data list (e.g., from
-#' \code{\link{compare_records}}) and computes various hashing structures used
-#' in record linkage or matching algorithms.
+#' This function takes as input a comparison data list from
+#' \code{\link{compare_records}} and computes various hashing structures used
+#' in record linkage.
 #'
-#' @param comparison_data A list containing the output from \code{compare_records()}
-#'   or a similar function. Typically:
+#' This function relies on four helper functions:
+#' \enumerate{
+#'   \item \code{\link{hash_field}} to computes a hash vector for each level of a given field
+#'   \item \code{\link{fs_to_ohe}} to convert field-specific indices to one-hot encoding
+#'   \item \code{\link{possible_patterns_ohe}} to generate all possible one-hot encoded patterns,
+#'   using \code{\link{fs_to_ohe}}
+#'   \item \code{\link{sei}}
+#' }
+#'
+#' @param comparison_data A list containing the output from \code{compare_records()}. Typically:
 #'   \enumerate{
 #'     \item An indicator (one-hot) matrix \code{(N x L)} of comparisons.
 #'     \item The number of records in the first data frame (\code{n1}).
@@ -13,7 +21,7 @@
 #'     \item A vector of level counts per field.
 #'   }
 #' @param algorithm A character vector specifying which algorithms to consider.
-#'   Options commonly include \code{"vabl"}, \code{"fabl"}, and \code{"BRL_hash"}.
+#'   Options include \code{"vabl"}, \code{"fabl"}, and \code{"BRL_hash"}.
 #'   Defaults to \code{c("vabl", "fabl", "BRL_hash")}.
 #' @param R A numeric value used by certain algorithms (e.g., \code{"fabl"}).
 #'   Defaults to 0. If \code{"BRL_hash"} is included in \code{algorithm}, then
@@ -22,7 +30,7 @@
 #'   \emph{all} possible one-hot patterns (via \code{\link{possible_patterns_ohe}})
 #'   based on the \code{field_levels}, rather than only those observed in
 #'   \code{comparison_data}.
-#' @param store_pair_to_pattern Logical indicating whether to store pair-to-pattern
+#' @param store_pair_to_pattern Logical. It indicates whether to store pair-to-pattern
 #'   mappings for the \code{"BRL_hash"} algorithm. Defaults to \code{TRUE}.
 #'
 #' @details
@@ -65,16 +73,17 @@
 #' # Suppose 'cd' is the result of compare_records(...)
 #' hash_results <- hash_comparisons(cd, algorithm = "vabl", R = 0)
 #'
-#' # If we want to use "BRL_hash" for some reason:
+#' # If we want to use "BRL_hash":
 #' hash_results_brl <- hash_comparisons(cd, algorithm = "BRL_hash")
 #' }
 #'
 #' @export
+
 hash_comparisons <- function(
     comparison_data,
-    algorithm             = c("vabl", "fabl", "BRL_hash"),
-    R                     = 0,
-    all_patterns          = FALSE,
+    algorithm = c("vabl", "fabl", "BRL_hash"),
+    R = 0,
+    all_patterns = FALSE,
     store_pair_to_pattern = TRUE
 ) {
   #----------------------------------------------------------------
@@ -87,15 +96,15 @@ hash_comparisons <- function(
   #----------------------------------------------------------------
   # 2) Extract elements from comparison_data
   #----------------------------------------------------------------
-  indicator_matrix  <- comparison_data[[1]]  # NxL one-hot matrix
-  num_records_df1   <- comparison_data[[2]]
-  num_records_df2   <- comparison_data[[3]]
-  field_levels      <- comparison_data[[4]]  # e.g. c(field1_levels, field2_levels, ...)
+  indicator_matrix <- comparison_data[[1]]  # NxL one-hot matrix
+  num_records_df1 <- comparison_data[[2]]
+  num_records_df2 <- comparison_data[[3]]
+  field_levels <- comparison_data[[4]]  # c(field1_levels, field2_levels, ...)
 
-  # Basic derived quantities
-  total_pairs       <- nrow(indicator_matrix)  # N
-  num_fields        <- length(field_levels)
-  field_indices     <- seq_len(num_fields)
+  # Basic quantities
+  total_pairs <- nrow(indicator_matrix)  # N
+  num_fields <- length(field_levels)
+  field_indices <- seq_len(num_fields)
 
   # field_marker: for each column, record which field it belongs to
   field_marker <- unlist(
@@ -109,11 +118,10 @@ hash_comparisons <- function(
   )
 
   #----------------------------------------------------------------
-  # 3) Compute hash offsets for each column
-  #    Using cumsum to build "offsets"
+  # 3) Compute hash offsets for each column, using cumsum to build "offsets"
   #----------------------------------------------------------------
   level_cumsum <- cumsum(c(0, field_levels))
-  # For field f, offset = level_cumsum[f], used by hash_field().
+  # For field f, offset = level_cumsum[f], used by hash_field()
 
   # For each field, build a vector of size = field_levels[f] with the offsets
   # Then unlist them into a single vector for all columns
@@ -150,7 +158,7 @@ hash_comparisons <- function(
   } else {
     # Only unique hashes observed in the data
     hashed_observed <- unique(row_hash)
-    num_patterns    <- length(hashed_observed)
+    num_patterns <- length(hashed_observed)
 
     hash_id <- factor(
       match(row_hash, hashed_observed),
@@ -164,8 +172,8 @@ hash_comparisons <- function(
 
   # Combine pair info with their assigned hash_id
   temp <- data.frame(
-    rec1   = pair_grid$rec1,
-    rec2   = pair_grid$rec2,
+    rec1 = pair_grid$rec1,
+    rec2 = pair_grid$rec2,
     hash_id
   )
 
@@ -215,8 +223,7 @@ hash_comparisons <- function(
   #----------------------------------------------------------------
   # 7) Build 'hash_to_file_1'
   #    A nested structure grouping pairs by (rec2, hash_id).
-  #    This is used by "fabl" or "BRL_hash" to do additional steps
-  #    (e.g., applying sei()).
+  #    This is used by "fabl" or "BRL_hash" to do additional steps, applying sei().
   #----------------------------------------------------------------
   hash_to_file_1 <- temp %>%
     select(rec1, rec2, hash_id) %>%

@@ -1,7 +1,7 @@
-#' Compute M and U Parameters for fabl
+#' Compute m and u Parameters for fabl
 #'
 #' Given the current match/nonmatch counts (A and B) for each feature, plus
-#' field markers, this helper function samples the M and U parameters by drawing
+#' field markers, this helper function samples the m and u parameters by drawing
 #' from Dirichlet distributions.
 #'
 #' @param matches_vec A numeric vector representing \eqn{A_Z} (the counts of matches
@@ -16,8 +16,8 @@
 #'
 #' @return A list with two elements:
 #'   \itemize{
-#'     \item \code{m_vec}: The updated M parameters (one entry per column).
-#'     \item \code{u_vec}: The updated U parameters (one entry per column).
+#'     \item \code{m_vec}: The updated m parameters (one entry per column).
+#'     \item \code{u_vec}: The updated u parameters (one entry per column).
 #'   }
 #' @examples
 #' matches_vec <- c(5, 10, 2)
@@ -25,6 +25,7 @@
 #' field_marker <- c(1, 2, 2)
 #' out <- compute_m_u(matches_vec, nonmatches_vec, m_prior = 1, u_prior = 1, field_marker)
 #' @export
+
 fabl_compute_m_u <- function(matches_vec, nonmatches_vec, m_prior, u_prior, field_marker) {
   # Add prior to match counts and nonmatch counts
   m_post <- m_prior + matches_vec
